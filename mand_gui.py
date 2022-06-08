@@ -1,8 +1,8 @@
 #!/usr/bin/python
 #$Id: mand_gui.py,v 1.18 2017/12/07 20:39:27 dan Exp dan $
 import sys
-from PyQt4.QtCore import *
-from PyQt4.QtGui import *
+from PyQt5.QtCore import *
+from PyQt5.QtGui import *
 from subprocess import call
 from collections import namedtuple
 
@@ -63,7 +63,7 @@ class PicRegion(QLabel):
                 xbox.setText(str(self.cand_xyw.x))
                 ybox.setText(str(self.cand_xyw.y))
                 wbox.setText(str(self.cand_xyw.width))
-            print '%s %s %s' % (self.cand_xyw.x, self.cand_xyw.y, self.cand_xyw.width)
+            print('%s %s %s' % (self.cand_xyw.x, self.cand_xyw.y, self.cand_xyw.width))
             self.rubberBand.hide()
 
 
@@ -96,9 +96,9 @@ def on_click():
         yval = ybox.text()
         wval = wbox.text()
         ival = inter.currentText()
-        print 'Calling mand %s %s %s %s %s' % (xval, yval, wval, name, ival)
+        print('Calling mand %s %s %s %s %s' % (xval, yval, wval, name, ival))
         call(['/home/dan/mandelbrot/mand', xval, yval, wval, name, ival])
-        print 'Done'
+        print('Done')
         reg.setPixmap(QPixmap('%s.bmp' % name))
         COUNT += 1
 
