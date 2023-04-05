@@ -1,5 +1,4 @@
-#!/usr/bin/python
-#$Id: mand_gui.py,v 1.18 2017/12/07 20:39:27 dan Exp dan $
+#!/usr/bin/env python
 import sys
 from PyQt5.QtCore import *
 from PyQt5.QtGui import *
