@@ -182,7 +182,7 @@ def on_run():
 
 @pyqtSlot()
 def on_save():
-        start = environ.get('MAND_SAVE_DIR', './Pictures')
+        start = environ.get('MAND_SAVE_DIR', environ['MAND_BMP_DIR'])
         dlg = QFileDialog(window, 'Save File', start, 'Images (*.bmp)')
         dlg.setFileMode(QFileDialog.AnyFile)
         if dlg.exec_():
