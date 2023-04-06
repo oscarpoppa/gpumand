@@ -4,7 +4,7 @@
 #include "colors.h"
 #include "bmp.h"
 #include "aspect.h"
-#include "get_coords.h"
+#include "get-coords.h"
 
 #define BLOCK_SIZE 16
 

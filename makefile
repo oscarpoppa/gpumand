@@ -1,15 +1,15 @@
 CFLAGS = -Xptxas -O3 -Xcompiler -O3 -arch=sm_50
 CC = nvcc
 
-mand: mand_main_retry.o bmp.o colors.o get_coords.o
-	$(CC) $(CFLAGS) -o mand mand_main_retry.o bmp.o colors.o get_coords.o
+mand: mand-main.o bmp.o colors.o get-coords.o
+	$(CC) $(CFLAGS) -o mand mand-main.o bmp.o colors.o get-coords.o
 	strip mand
 
-mand_main_retry.o: mand_main_retry.cu bmp.h colors.h mtypes.h get_coords.h aspect.h
-	$(CC) $(CFLAGS) -c mand_main_retry.cu
+mand-main.o: mand-main.cu bmp.h colors.h mtypes.h get-coords.h aspect.h
+	$(CC) $(CFLAGS) -c mand-main.cu
 
-get_coords.o: get_coords.c mtypes.h
-	$(CC) $(CFLAGS) -c get_coords.c
+get-coords.o: get-coords.c mtypes.h
+	$(CC) $(CFLAGS) -c get-coords.c
 
 colors.o: colors.c
 	$(CC) $(CFLAGS) -c colors.c 
