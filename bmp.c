@@ -1,4 +1,3 @@
-//$Id: bmp.c,v 1.4 2017/12/31 05:17:32 dan Exp dan $
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>

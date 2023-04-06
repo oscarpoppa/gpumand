@@ -1,4 +1,3 @@
-//$Id: mand_main_kern.cu,v 1.3 2017/12/06 20:51:29 dan Exp $
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>

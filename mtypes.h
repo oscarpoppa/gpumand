@@ -1,4 +1,3 @@
-//$Id: mtypes.h,v 1.1 2017/12/19 20:00:20 dan Exp $
 #ifndef __MTYPES_H
 #include <stdint.h>
 

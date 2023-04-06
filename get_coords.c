@@ -1,4 +1,3 @@
-//$Id: get_coords.c,v 1.2 2017/12/30 08:21:40 dan Exp $
 #include "mtypes.h"
 #include <string.h>
 #include <stdio.h>

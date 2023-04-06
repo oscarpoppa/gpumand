@@ -1,4 +1,3 @@
-//$Id: colors.c,v 1.1 2017/12/19 20:00:20 dan Exp $
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
