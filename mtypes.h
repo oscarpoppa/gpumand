@@ -1,7 +1,8 @@
-//$Id: mtypes.h,v 1.6 2017/12/06 20:51:29 dan Exp $
+//$Id: mtypes.h,v 1.1 2017/12/19 20:00:20 dan Exp $
 #ifndef __MTYPES_H
 #include <stdint.h>
-typedef struct {
+
+typedef struct cstruct {
     double real;
     double imag;
     double length;

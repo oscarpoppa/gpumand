@@ -1,4 +1,4 @@
-//$Id: get_coords.h,v 1.3 2017/12/03 22:10:42 dan Exp $
+//$Id: get_coords.h,v 1.1 2017/12/19 20:00:20 dan Exp $
 #ifndef __GET_COORDS_H
 #include "mtypes.h"
 extern "C" {

@@ -1,4 +1,4 @@
-//$Id: get_coords.c,v 1.5 2017/12/06 20:51:29 dan Exp $
+//$Id: get_coords.c,v 1.2 2017/12/30 08:21:40 dan Exp $
 #include "mtypes.h"
 #include <string.h>
 #include <stdio.h>
@@ -18,6 +18,5 @@ RunStart *get_coords(int argc, char *argv[]) {
             fprintf(stderr, "Arguments: llreal llimag log_edge filename interleave\n");
             exit(0);
     };  
-    strcat(ret->filename, ".bmp");
     return ret;
 }

@@ -1,4 +1,4 @@
-//$Id: colors.c,v 1.9 2017/12/04 05:37:26 dan Exp $
+//$Id: colors.c,v 1.1 2017/12/19 20:00:20 dan Exp $
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -72,6 +72,12 @@ ColorInfo *make_pall() {
         putpix(pp, &current);
         if (current.grn == 0xFF)
             break;
+        pp++;
+    }
+    int j;
+    Pixel white = {0xFF, 0xFF, 0xFF};
+    for (j=0; j<=12; j++) {
+        putpix(pp, &white);
         pp++;
     }
     ret->size = count;
