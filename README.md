@@ -4,6 +4,8 @@ only double precision C(CUDA)
 
 
 Install:
+
+    Set configuration in gpu-mand.ini to your preference
     
     $ git clone https://github.com/oscarpoppa/gpumand.git
     
@@ -11,8 +13,7 @@ Install:
     
     $ make
 
-    Set configuration in setenv.sh to your preference
 
 Run:
     
-    $ runmandgui.sh
+    $ mand-gui.py
