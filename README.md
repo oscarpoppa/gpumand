@@ -19,3 +19,4 @@ Install:
 Run:
     
     $ mand-gui.py
+![saaa](https://user-images.githubusercontent.com/69337264/230668049-b6bef85c-f4c2-45f4-af34-e5ddcd7758a6.png)
