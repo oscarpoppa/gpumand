@@ -3,6 +3,8 @@ CUDA/QT Double precision Mandelbrot set browser
 
 Allows successive/recursive, mouse-based "blow ups" of screen selections, and the ability to save images.
 
+![mynubg](https://user-images.githubusercontent.com/69337264/230671103-c5b9b33e-a099-4a79-8345-51d0a84b1fa9.png)
+
 
 Install:
 
@@ -19,4 +21,3 @@ Install:
 Run:
     
     $ mand-gui.py
-![saaa](https://user-images.githubusercontent.com/69337264/230668049-b6bef85c-f4c2-45f4-af34-e5ddcd7758a6.png)
