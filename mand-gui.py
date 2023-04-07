@@ -9,6 +9,16 @@ from os import environ
 from collections import namedtuple
 from math import ceil
 
+
+
+
+
+
+
+
+
+
+
 TITLE = 'Mandelbrot Set Viewer'
 STARTFILE = '{}/whole.bmp'.format(environ.get('MAND_BMP_DIR', './pix'))
 NAMEPATT = '{}/mandapp%s.bmp'.format(environ.get('MAND_BMP_DIR', './pix'))
