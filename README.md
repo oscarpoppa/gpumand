@@ -7,6 +7,8 @@ Install:
     
     $ git clone https://github.com/oscarpoppa/gpumand.git
     
+    $ cd gpumand
+    
     $ make
 
 Run:
