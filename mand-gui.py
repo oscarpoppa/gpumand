@@ -5,23 +5,17 @@ from PyQt5.QtWidgets import *
 from sys import argv, exit
 from subprocess import call
 from shutil import copyfile
-from os import environ
 from collections import namedtuple
 from math import ceil
+from configparser import ConfigParser
 
-
-
-
-
-
-
-
-
-
+config = ConfigParser()
+config.read('gpu-mand.ini')
+paths = config['paths']
 
 TITLE = 'Mandelbrot Set Viewer'
-STARTFILE = '{}/whole.bmp'.format(environ.get('MAND_BMP_DIR', './pix'))
-NAMEPATT = '{}/mandapp%s.bmp'.format(environ.get('MAND_BMP_DIR', './pix'))
+STARTFILE = '{}/whole.bmp'.format(paths['bmp_dir'])
+NAMEPATT = '{}/mandapp%s.bmp'.format(paths['bmp_dir'])
 RESET_COORDS = (-2.0, -1.333333, 4.0, 0)
 MAX_MULT = 30
 PIX_WID = 1200
@@ -184,7 +178,7 @@ def on_run():
         yval = ybox.text()
         wval = wbox.text()
         ival = inter.currentText()
-        call(['{}/mand'.format(environ.get('MAND_BIN_DIR', './')), xval, yval, wval, MAP.fname, ival])
+        call(['{}/mand'.format(paths['bin_dir']), xval, yval, wval, MAP.fname, ival])
         added = MAP.add(XYWD(reg.cand_xyw.x, reg.cand_xyw.y, reg.cand_xyw.w, int(reg.cand_xyw.d)))
         scr_layout.insertWidget(0, MAP.curr.icon)
         fset(MAP.curr) 
@@ -192,7 +186,7 @@ def on_run():
 
 @pyqtSlot()
 def on_save():
-        start = environ.get('MAND_SAVE_DIR', environ['MAND_BMP_DIR'])
+        start = paths['save_dir']
         dlg = QFileDialog(window, 'Save File', start, 'Images (*.bmp)')
         dlg.setFileMode(QFileDialog.AnyFile)
         if dlg.exec_():
