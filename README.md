@@ -1,6 +1,7 @@
 # gpumand
-first run of GPU mandelbrot browser.
-only double precision C(CUDA)
+Double precision Mandelbrot set browser
+
+Allows successive/recursive Mouse-based "blow ups" of screen selections, and albility to save images.
 
 
 Install:
