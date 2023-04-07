@@ -11,6 +11,8 @@ Install:
     
     $ make
 
+    Set configuration in setenv.sh to your preference
+
 Run:
     
     $ runmandgui.sh
