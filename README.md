@@ -15,7 +15,7 @@ Install:
     
     $ make
 
-    > Set configuration in gpu-mand.ini to your preference
+    > Set configuration in mand-gui.ini to your location of choice
 
 
 Run:
