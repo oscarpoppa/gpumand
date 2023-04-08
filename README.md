@@ -1,5 +1,5 @@
 # gpumand
-CUDA/QT Double precision Mandelbrot set browser
+CUDA/QT Double-precision-limited Mandelbrot set browser/explorer. Hours of fun!
 
 Allows successive/recursive, cursor-based zoom-ins of screen selections, and the ability to save images.
 
