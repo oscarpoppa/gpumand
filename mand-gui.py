@@ -10,7 +10,7 @@ from math import ceil
 from configparser import ConfigParser
 
 config = ConfigParser()
-config.read('gpu-mand.ini')
+config.read('mand-gui.ini')
 paths = config['paths']
 
 TITLE = 'Mandelbrot Set Viewer'
