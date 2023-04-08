@@ -14,8 +14,8 @@ config.read('mand-gui.ini')
 paths = config['paths']
 
 TITLE = 'Mandelbrot Set Viewer'
-STARTFILE = '{}/whole.bmp'.format(paths['bmp_dir'])
-NAMEPATT = '{}/mandapp%s.bmp'.format(paths['bmp_dir'])
+STARTFILE = '{}/pix/whole.bmp'.format(paths['bin_dir'])
+NAMEPATT = '{}/pix/mandapp%s.bmp'.format(paths['bin_dir'])
 RESET_COORDS = (-2.0, -1.333333, 4.0, 0)
 MAX_MULT = 30
 PIX_WID = 1200
