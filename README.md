@@ -15,7 +15,7 @@ Install:
     
     $ make
 
-    > Set configuration in mand-gui.ini to reflect your install
+    > Update mand-gui.ini, or supply your own (with --ini option) to reflect your install
 
 
 Run:
