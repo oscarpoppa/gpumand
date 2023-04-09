@@ -3,7 +3,7 @@ CUDA/QT Double-precision-limited Mandelbrot set browser/explorer for CUDA-enable
 
 Allows successive/recursive, cursor-based zoom-ins of screen selections, and the ability to save images.
 
-![Screenshot from 2023-04-09 16-35-19](https://user-images.githubusercontent.com/69337264/230797611-11480687-11b6-4b05-b1d1-9d16802b8e50.png)
+![Screenshot from 2023-04-09 16-48-37](https://user-images.githubusercontent.com/69337264/230798094-55f203e7-b7b6-4c5d-9259-b5845c3e38ed.png)
 
 
 Install:
