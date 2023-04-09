@@ -20,4 +20,4 @@ Install:
 
 Run:
     
-    $ mand-gui.py
+    $ mand-gui.py <--ini=your.ini>
