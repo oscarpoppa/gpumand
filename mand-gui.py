@@ -8,9 +8,15 @@ from shutil import copyfile
 from collections import namedtuple
 from math import ceil
 from configparser import ConfigParser
+from optparse import OptionParser
+
+
+parser = OptionParser()
+parser.add_option("-i", "--ini", dest="ininame", help="Supply ini file path", metavar="FILE")
+(options,args) = parser.parse_args()
 
 config = ConfigParser()
-config.read('mand-gui.ini')
+config.read(options.ininame or 'mand-gui.ini')
 paths = config['paths']
 
 TITLE = 'Mandelbrot Set Viewer'
