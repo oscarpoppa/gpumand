@@ -2,7 +2,7 @@
 from PyQt5.QtCore import *
 from PyQt5.QtGui import *
 from PyQt5.QtWidgets import *
-from sys import argv, exit
+from sys import argv, exit, stderr
 from subprocess import call
 from shutil import copyfile
 from collections import namedtuple
@@ -16,8 +16,13 @@ parser.add_option("-i", "--ini", dest="ininame", help="Supply ini file path", me
 (options,args) = parser.parse_args()
 
 config = ConfigParser()
-config.read(options.ininame or 'mand-gui.ini')
-paths = config['paths']
+fname = options.ininame or 'mand-gui.ini'
+try:
+    config.read(fname)
+    paths = config['paths']
+except Exception:
+    stderr.write('Something wrong with ini file: {}\n'.format(fname))
+    exit(1)
 
 TITLE = 'Mandelbrot Set Viewer'
 STARTFILE = '{}/pix/whole.bmp'.format(paths['bin_dir'])
