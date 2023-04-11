@@ -38,7 +38,7 @@ __global__ void MandKern(cudaDoubleComplex* dev_cst_ptr, const uint32_t* dev_col
             break; 
     }
     if (cnt == iterations)
-        dev_pix_ptr[WIDTH*pix_y+pix_x] = 0;
+        dev_pix_ptr[WIDTH*pix_y+pix_x] = 0x00000000;
     else
         dev_pix_ptr[WIDTH*pix_y+pix_x] = dev_col_ptr[cnt/dev_init_ptr->ilev];
 }
