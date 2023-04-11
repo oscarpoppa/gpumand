@@ -1,3 +1,4 @@
+//$Id: colors.c,v 1.1 2017/12/19 20:00:20 dan Exp $
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -33,28 +34,46 @@ ColorInfo *make_pall() {
     };  
     while (1){
         current.grn++; 
-        current.red--; 
         putpix(pp, &current);
         pp++;
         if (current.grn == 0xFF)
             break;
     };  
     while (1) {
-        current.grn--;
-        current.blu++;
+        current.red--;
         putpix(pp, &current);
         pp++;
         if (current.red == 0)
              break;
     };
     while (1) {
-        current.blu--;
-        current.red++; 
+        current.blu++;
         putpix(pp, &current);
         pp++;
         if (current.blu == 0xFF)
              break;
     };
+    while (1) {
+        current.grn--;
+        putpix(pp, &current);
+        pp++;
+        if (current.grn == 0)
+            break; 
+    }
+    while (1)  {
+        current.red++;
+        putpix(pp, &current);
+        pp++;
+        if (current.red == 0xFF)
+            break;
+    }
+    while (1)  {
+        current.grn++;
+        putpix(pp, &current);
+        if (current.grn == 0xFF)
+            break;
+        pp++;
+    }
     int j;
     Pixel white = {0xFF, 0xFF, 0xFF};
     for (j=0; j<=12; j++) {
