@@ -5,7 +5,7 @@ mand: mand-main.o bmp.o colors.o get-coords.o
 	$(CC) $(CFLAGS) -o mand mand-main.o bmp.o colors.o get-coords.o
 	strip mand
 
-mand-main.o: mand-main.cu bmp.h colors.h mtypes.h get-coords.h aspect.h
+mand-main.o: mand-main.cu iter.h bmp.h colors.h mtypes.h get-coords.h aspect.h
 	$(CC) $(CFLAGS) -c mand-main.cu
 
 get-coords.o: get-coords.c mtypes.h
