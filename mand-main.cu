@@ -3,6 +3,7 @@
 #include "mtypes.h"
 #include "colors.h"
 #include "bmp.h"
+#include "iter.h"
 #include "aspect.h"
 #include "get-coords.h"
 
@@ -14,13 +15,12 @@ typedef struct {
     cudaDoubleComplex llft;
     double ledg;
     size_t pitch;
-    int colsz;
     int ilev;
 } Init;
 
 __global__ void MandKern(cudaDoubleComplex* dev_cst_ptr, const uint32_t* dev_col_ptr, uint32_t* dev_pix_ptr, const Init* dev_init_ptr) {
     int cnt = 0; 
-    const int iterations = dev_init_ptr->colsz * dev_init_ptr->ilev;
+    const int iterations = ITERATIONS * dev_init_ptr->ilev;
     const int pix_x = blockIdx.x * blockDim.x + threadIdx.x;
     const int pix_y = blockIdx.y * blockDim.y + threadIdx.y;
     __shared__ cudaDoubleComplex row[BLOCK_SIZE];
@@ -50,7 +50,6 @@ int main(int argc, char **argv) {
     cudaDoubleComplex* dev_cst_ptr;
     RunStart *init = get_coords(argc, argv);
     ColorInfo *colors = make_pall();
-    istruct.colsz = colors->size;
     istruct.llft.x = init->lleft.real;
     istruct.llft.y = init->lleft.imag;
     istruct.ledg = init->lleft.length;

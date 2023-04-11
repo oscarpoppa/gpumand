@@ -11,7 +11,7 @@ mand-main.o: mand-main.cu bmp.h colors.h mtypes.h get-coords.h aspect.h
 get-coords.o: get-coords.c mtypes.h
 	$(CC) $(CFLAGS) -c get-coords.c
 
-colors.o: colors.c
+colors.o: colors.c iter.h
 	$(CC) $(CFLAGS) -c colors.c 
 
 bmp.o: bmp.c aspect.h
