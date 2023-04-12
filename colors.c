@@ -26,52 +26,27 @@ ColorInfo *make_pall() {
     ret->pall = (uint32_t*)malloc(ITERATIONS*sizeof(uint32_t));
     uint32_t *pp = ret->pall;
     putpix(pp++, &current);
-    while (1){
-        current.red++; 
+
+    while(current.red++ != 0xFF)
         putpix(pp++, &current);
-        if (current.red == 0xFF)
-            break;
-    };  
-    while (1){
-        current.grn++; 
+    while(current.grn++ != 0xFF)
         putpix(pp++, &current);
-        if (current.grn == 0xFF)
-            break;
-    };  
-    while (1) {
-        current.red--;
+    while(current.red-- != 0x00)
         putpix(pp++, &current);
-        if (current.red == 0)
-             break;
-    };
-    while (1) {
-        current.blu++;
+    while(current.blu++ != 0xFF)
         putpix(pp++, &current);
-        if (current.blu == 0xFF)
-             break;
-    };
-    while (1) {
-        current.grn--;
+    while(current.grn-- != 0x00)
         putpix(pp++, &current);
-        if (current.grn == 0)
-            break; 
-    }
-    while (1)  {
-        current.red++;
+    while(current.red++ != 0xFF)
         putpix(pp++, &current);
-        if (current.red == 0xFF)
-            break;
-    }
-    while (1)  {
-        current.grn++;
+    while(current.grn++ != 0xFF)
         putpix(pp++, &current);
-        if (current.grn == 0xFF)
-            break;
-    }
-    int j;
-    for (j=count; j<=ITERATIONS; j++) {
-        putpix(pp++, &white);
-    }
+    while(current.blu-- != 0x00)
+        putpix(pp++, &current);
+    while(current.grn-- != 0x00)
+        putpix(pp++, &current);
+    while(current.red-- != 0x00)
+        putpix(pp++, &current);
     ret->size = count;
     return ret;
 }
