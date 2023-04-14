@@ -19,23 +19,27 @@ void putpix(uint32_t *pp, const Pixel *pix) {
 }
 
 ColorInfo *make_pall() {
-    Pixel white = {0xFF, 0xFF, 0xFF};
+    Pixel lgr = {0xF0, 0xF0, 0xF0};
     ColorInfo *ret = (ColorInfo*)malloc(sizeof(ColorInfo));
     ret->pall = (uint32_t*)malloc(5*ITERATIONS*sizeof(uint32_t));
     uint32_t *pp = ret->pall;
-    Pixel current = {0x80, 0x01, 0x01};
-    while(current.red++ < 0xFE)
+    Pixel current = {0xC0, 0x03, 0x03};
+    while(current.grn++ < 0xFC) {
         putpix(pp++, &current);
-    while(current.grn++ < 0xFE)
-        putpix(pp++, &current);
+        current.grn++;
+        current.grn++;
+    }
 //yellow
-    while(current.red-- > 0x01)
+    while(current.red-- > 0x03) {
         putpix(pp++, &current);
+        current.red--;
+        current.red--;
+    }
 //green
-    while(current.blu++ < 0xFE)
+    while(current.blu++ < 0xFC)
         putpix(pp++, &current);
 //cyan
-    while(current.grn-- > 0x01)
+    while(current.grn-- > 0x03)
         putpix(pp++, &current);
 //blue     
     while(current.red++ < 0x7F)
@@ -48,12 +52,12 @@ ColorInfo *make_pall() {
         current.grn+=0x02;
         putpix(pp++, &current);
     }
-    while(current.red++ < 0xFE)
+    while(current.red++ < 0xFC)
         putpix(pp++, &current);
-    while(current.grn++ < 0xFE)
+    while(current.grn++ < 0xFC)
         putpix(pp++, &current);
     for (int i=0;i<12;i++)
-        putpix(pp++, &current);
+        putpix(pp++, &lgr);
     ret->size = count;
     return ret;
 }
