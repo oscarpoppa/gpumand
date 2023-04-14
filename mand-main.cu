@@ -18,7 +18,7 @@ typedef struct {
     int ilev;
 } Init;
 
-__global__ void MandKern(cudaDoubleComplex* dev_cst_ptr, const uint32_t* dev_col_ptr, uint32_t* dev_pix_ptr, const Init* dev_init_ptr) {
+__global__ void MandKern(cudaDoubleComplex* dev_cst_ptr, const uint32_t* dev_col_ptr, uint32_t* dev_pix_ptr, const Init* dev_init_ptr, const uint32_t palsz) {
     int cnt = 0; 
     const int iterations = ITERATIONS * dev_init_ptr->ilev;
     const int pix_x = blockIdx.x * blockDim.x + threadIdx.x;
@@ -40,7 +40,7 @@ __global__ void MandKern(cudaDoubleComplex* dev_cst_ptr, const uint32_t* dev_col
     if (cnt == iterations)
         dev_pix_ptr[WIDTH*pix_y+pix_x] = 0x00000000;
     else
-        dev_pix_ptr[WIDTH*pix_y+pix_x] = dev_col_ptr[cnt/dev_init_ptr->ilev];
+        dev_pix_ptr[WIDTH*pix_y+pix_x] = dev_col_ptr[cnt*palsz/iterations];
 }
 
 int main(int argc, char **argv) {
@@ -64,7 +64,7 @@ int main(int argc, char **argv) {
     cudaMemcpy(dev_col_ptr, colors->pall, colors->size*sizeof(uint32_t), cudaMemcpyHostToDevice);
     dim3 dimBlock(BLOCK_SIZE, BLOCK_SIZE);
     dim3 dimGrid(WIDTH/BLOCK_SIZE, HEIGHT/BLOCK_SIZE);
-    MandKern<<<dimGrid, dimBlock>>>(dev_cst_ptr, dev_col_ptr, dev_pix_ptr, dev_init_ptr);
+    MandKern<<<dimGrid, dimBlock>>>(dev_cst_ptr, dev_col_ptr, dev_pix_ptr, dev_init_ptr, colors->size);
     uint32_t *pixarr = (uint32_t*)malloc(HEIGHT*WIDTH*sizeof(uint32_t));
     cudaMemcpy(pixarr, dev_pix_ptr, HEIGHT*WIDTH*sizeof(uint32_t), cudaMemcpyDeviceToHost); 
     gen_bmp(init->filename, pixarr, WIDTH, HEIGHT);
