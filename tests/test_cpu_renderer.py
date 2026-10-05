@@ -193,6 +193,31 @@ class CpuRenderer(unittest.TestCase):
         same = sum(abs(a - b) < 1e-3 for a, b in zip(nu, other)) / float(len(nu))
         self.assertGreater(same, 0.999, 'floatexp vs double perturbation: %.4f agree' % same)
 
+    # -- iteration limits past 2^31 (the top multiplier, 20 million, is 4e10 iterations) --------------------
+    # Every pixel of these views escapes within a few iterations, so only the limit's arithmetic is tested.
+    # 2000 * 1,073,742 = 2,147,484,000 is just past 2^31: held in 32 bits it goes negative, the loop never
+    # runs, and the whole image would come out "inside the set" (-1).
+    OUTSIDE = ('0.6', '0.5')
+    MULTS = (1073742, 20000000)
+
+    def test_huge_iteration_limit_plain_path(self):
+        x, y = self.OUTSIDE
+        _, ok = self.render(MAND, x, y, 0.5, 1, expect_path='plain')
+        self.assertTrue(all(v >= 0 for v in ok), 'sanity: nothing in this view is inside the set')
+        for mult in self.MULTS:
+            _, huge = self.render(MAND, x, y, 0.5, mult, expect_path='plain')
+            self.assertEqual(list(ok), list(huge), mult)
+
+    def test_huge_iteration_limit_perturbation_paths(self):
+        x, y = self.OUTSIDE
+        for width, exe, path in ((Decimal('1e-12'), MAND, 'perturbation+BLA'), (Decimal('1e-6'), MAND_FX, 'floatexp')):
+            ref = self.make_ref(x, y, width, 2000)
+            _, ok = self.render(exe, x, y, width, 1, ref, expect_path=path)
+            self.assertTrue(all(v >= 0 for v in ok), path)
+            for mult in self.MULTS:
+                _, huge = self.render(exe, x, y, width, mult, ref, expect_path=path)
+                self.assertEqual(list(ok), list(huge), (path, mult))
+
     # -- determinism -----------------------------------------------------------------
 
     def test_result_does_not_depend_on_thread_count(self):

@@ -99,6 +99,9 @@ def drive():
         frame = frame.f_back
     g = frame.f_globals
     MAP, window = g['MAP'], g['window']
+    # Reset and quitting offer to delete files; flows below that reset freely keep them, unless a test says otherwise
+    real_ask = g['ask_cleanup']
+    g['ask_cleanup'] = lambda parent, count, size, reset=False: 'keep'
     dialogs = []
     QtWidgets.QMessageBox.warning = staticmethod(lambda *a, **k: dialogs.append(a))
 
@@ -124,7 +127,7 @@ def drive():
     check('all the controls are in one column right of the picture', ip.x() + g['reg'].width() <= side_x and
           all(pos(n).x() >= side_x for n in ('xbox', 'run', 'back', 'save', 'iter_dial', 'pal_box')), side_x)
     fm = g['xbox'].fontMetrics()
-    check('multiplier box shows 4-digit values', g['inter'].width() >= fm.horizontalAdvance('1000'), g['inter'].width())
+    check('multiplier box shows 8-digit values', g['inter'].width() >= fm.horizontalAdvance('20000000'), g['inter'].width())
     dial = g['iter_dial']
     check('there is an iteration dial, big enough to use, beside the image', dial.width() >= 80 and
           dial.mapTo(window, QtCore.QPoint(0, 0)).x() > g['reg'].mapTo(window, QtCore.QPoint(0, 0)).x() + g['reg'].width() - 1, dial.size())
@@ -135,9 +138,10 @@ def drive():
     mult10 = g['MULTIPLIERS'][10]
     check('turning the dial sets the multiplier box', g['inter'].currentText() == str(mult10), g['inter'].currentText())
     check('turning the dial updates the readout', g['iter_label'].text() == '\u00d7%d = {:,} iterations'.format(2000 * mult10) % mult10, g['iter_label'].text())
-    g['inter'].setCurrentText('1000')
+    g['inter'].setCurrentText('20000000')
     check('picking a multiplier in the box turns the dial', dial.value() == g['inter'].count() - 1, dial.value())
-    check('the readout handles the largest value', g['iter_label'].text() == '\u00d71000 = 2,000,000 iterations', g['iter_label'].text())
+    check('the readout handles the largest value', g['iter_label'].text() == '\u00d720000000 = 40,000,000,000 iterations', g['iter_label'].text())
+    check('the multipliers go up to 20 million, in increasing order', g['MULTIPLIERS'][-1] == 20000000 and g['MULTIPLIERS'] == sorted(set(g['MULTIPLIERS'])))
     g['inter'].setCurrentIndex(0)
     check('the dial returns to the start', dial.value() == 0)
     check('window is at least as big as its layout needs', window.width() >= window.minimumSizeHint().width() and
@@ -433,6 +437,127 @@ def drive():
           (exact(g, 'xbox'), exact(g, 'wbox')))
     check('the controls column does not grow with the window',
           g['color_group'].width() < 500, g['color_group'].width())
+
+    # -- Enter presses Run
+    from PyQt5 import QtTest
+    g['on_reset']()
+    release(g, 300, 500, 600)
+    window.activateWindow()
+    QtWidgets.QApplication.processEvents()
+    before = len(list(MAP))
+    QtTest.QTest.keyClick(window, QtCore.Qt.Key_Return)
+    check('the Return key runs the selection', len(list(MAP)) == before + 1, (before, len(list(MAP))))
+    release(g, 100, 100, 400)
+    before = len(list(MAP))
+    QtTest.QTest.keyClick(window, QtCore.Qt.Key_Enter)
+    check('the keypad Enter key runs it too', len(list(MAP)) == before + 1, (before, len(list(MAP))))
+    check('the Run button says so', 'Enter' in g['run'].toolTip(), g['run'].toolTip())
+    check('holding Enter does not repeat the run', len(g['run_keys']) == 2 and all(not k.autoRepeat() for k in g['run_keys']))
+
+    # -- Reset offers to delete the files of the views it throws away (but keeps the opening view's)
+    pix_dir = g['PIX_DIR']
+    g['on_reset']()
+    for _ in range(2):
+        release(g, 300, 500, 600)
+        g['on_run']()
+    g['on_color_change']()
+    opening = [os.path.join(pix_dir, n) for n in ('whole-start.bmp', 'whole.bmp.nu')]
+    opening = [f for f in opening if os.path.exists(f)]
+    old = [f for f in g['generated_files'](pix_dir, opening=False)]
+    check('there are old views to clean', len(old) >= 4 and not any(os.path.basename(f).startswith('whole') for f in old), len(old))
+    depth = len(list(MAP))
+    asked = []
+
+    def answer_reset(choice):
+        def fake(parent, count, size, reset=False):
+            asked.append((count, size, reset))
+            return choice
+        g['ask_cleanup'] = fake
+
+    answer_reset('cancel')
+    g['on_reset']()
+    check('Cancel leaves the history and every file alone', len(list(MAP)) == depth and all(os.path.exists(f) for f in old),
+          (depth, len(list(MAP))))
+    check('the reset prompt says it is a reset and counts only old views', asked and asked[-1][2] is True and asked[-1][0] == len(old), asked)
+    answer_reset('keep')
+    g['on_reset']()
+    check('Keep all resets but deletes nothing', len(list(MAP)) == 1 and all(os.path.exists(f) for f in old))
+    for _ in range(2):
+        release(g, 300, 500, 600)
+        g['on_run']()
+    old = g['generated_files'](pix_dir, opening=False)
+    answer_reset('delete')
+    g['on_reset']()
+    check('Delete all resets and removes the old views', len(list(MAP)) == 1 and not any(os.path.exists(f) for f in old),
+          [f for f in old if os.path.exists(f)])
+    check('the opening view\'s files and whole.bmp survive a reset', all(os.path.exists(f) for f in opening + [os.path.join(pix_dir, 'whole.bmp')]))
+    g['pal_box'].setCurrentText('fire')
+    check('the opening view can still be recolored after a reset', g['reg'].source.toImage() == QtGui.QImage(g['image_path'](MAP.curr)))
+    g['pal_box'].setCurrentText('twilight')
+    asked.clear()
+    g['on_reset']()
+    check('with nothing old to delete a reset does not ask', not asked, asked)
+    g['ask_cleanup'] = lambda parent, count, size, reset=False: 'keep'
+
+    # -- quitting: the user decides what to do with the generated files (never saved copies, never whole.bmp)
+    pix_dir = g['PIX_DIR']
+    for _ in range(3):         # (the reset tests above cleaned up, so draw some views to clean again)
+        release(g, 300, 500, 600)
+        g['on_run']()
+    g['on_color_change']()
+    guard = [os.path.join(pix_dir, n) for n in ('keepme.bmp', 'mandapp9x.bmp', 'whole.bmp')]
+    for path in guard:
+        if not os.path.exists(path):
+            open(path, 'wb').write(b'precious')
+    saved_copy = os.path.join(saves, 'saved-by-me.bmp')
+    open(saved_copy, 'wb').write(b'precious')
+    old_ref = os.path.join(pix_dir, 'mandapp77.bmp.ref')
+    open(old_ref, 'wb').write(b'stale')
+    os.utime(old_ref, (1, 1))
+    gen = [f for f in g['generated_files'](pix_dir) if f != old_ref]
+    check('there are generated files to offer', len(gen) >= 3, len(gen))
+    asked = []
+
+    def answer(choice):
+        def fake(parent, count, size, reset=False):
+            asked.append((count, size, reset))
+            return choice
+        g['ask_cleanup'] = fake
+
+    answer('cancel')
+    check('Cancel keeps the window open', window.close() is False and window.isVisible())
+    check('Cancel deletes nothing', all(os.path.exists(f) for f in gen))
+    check('the quit prompt reports the count and size', asked and asked[-1][0] == len(gen) and asked[-1][2] is False and asked[-1][1] > 0, (asked, len(gen)))
+    check('stale reference orbits are swept before asking', not os.path.exists(old_ref))
+    answer('keep')
+    check('Keep all closes the window', window.close() is True and not window.isVisible())
+    check('Keep all deletes nothing', all(os.path.exists(f) for f in gen))
+    window.show()
+    answer('delete')
+    check('Delete all closes the window', window.close() is True and not window.isVisible())
+    check('Delete all removes every generated file', not g['generated_files'](pix_dir) and not any(os.path.exists(f) for f in gen),
+          [f for f in gen if os.path.exists(f)])
+    check('saved copies, whole.bmp and unrelated files survive', all(os.path.exists(f) for f in guard + [saved_copy]),
+          [f for f in guard + [saved_copy] if not os.path.exists(f)])
+    window.show()
+    asked.clear()
+    check('with nothing to delete there is no prompt', window.close() is True and not asked, asked)
+
+    # -- the real dialog: its three buttons give the three answers
+    g['ask_cleanup'] = real_ask
+    window.show()
+    for label, want in (('Keep all', 'keep'), ('Delete all', 'delete'), ('Cancel', 'cancel')):
+        def click(label=label):
+            box = QtWidgets.QApplication.activeModalWidget()
+            [b for b in box.buttons() if b.text() == label][0].click()
+        QtCore.QTimer.singleShot(300, click)
+        got = real_ask(window, 3, 5 << 20)
+        check('the %s button answers %r' % (label, want), got == want, got)
+    box_text = []
+    QtCore.QTimer.singleShot(300, lambda: (box_text.append(QtWidgets.QApplication.activeModalWidget().text()),
+                                           QtWidgets.QApplication.activeModalWidget().reject()))
+    check('Escape or closing the dialog cancels', real_ask(window, 3, 5 << 20) == 'cancel')
+    check('the dialog states the count and size', '3 generated files' in box_text[0] and '5.0 MB' in box_text[0], box_text)
     return 0
 
 

@@ -30,7 +30,7 @@
 /* Continuous iteration count for a pixel that escaped at 0-based iteration idx (so idx+1 updates
  * had been applied) with |z|^2 = zz > BAILOUT2. It is the same on both sides of an iteration-count
  * band edge (z_n ~ z_{n-1}^2), so coloring by it has no bands. Never negative. */
-HD static inline double smooth_nu(int idx, double zz) {
+HD static inline double smooth_nu(iter_t idx, double zz) {
     const double nu = (double)idx + 2.0 - log2(0.5 * log2(zz));
     return nu > 0.0 ? nu : 0.0;
 }
@@ -65,12 +65,13 @@ typedef struct {
 
 /* ---- double-precision perturbation (view widths down to ~1e-250) ------------ */
 
-HD static inline int pert_pixel_dbl(const Cd *ref, int refn, BlaView bv, double ox, double oy,
-                                    double step, int iterations, uint32_t *steps, double *nu) {
+HD static inline iter_t pert_pixel_dbl(const Cd *ref, int refn, BlaView bv, double ox, double oy,
+                                    double step, iter_t iterations, uint32_t *steps, double *nu) {
     const double dcx = ox * step, dcy = oy * step;
     const int last = refn - 1;
     double dx = 0.0, dy = 0.0;
-    int n = 0, cnt = 0;
+    int n = 0;
+    iter_t cnt = 0;
     uint32_t taken = 0;
     while (cnt < iterations) {
         double ndx, ndy;
@@ -179,15 +180,16 @@ HD static inline double fx_scale(int k) { return k >= FX_SCALE_MIN ? ldexp(1.0, 
  *     e' = 2*Z*e + 2^k * e^2 + dcs,   with dcs = dc * 2^-k   (kept up to date whenever k changes).
  * step = step_mant * 2^step_exp is the pixel spacing; ox, oy are pixel offsets from the centre.
  */
-HD static inline int pert_pixel_fx(const Cd *ref, int refn, double ox, double oy,
-                                   double step_mant, int step_exp, int iterations, uint32_t *steps, double *nu) {
+HD static inline iter_t pert_pixel_fx(const Cd *ref, int refn, double ox, double oy,
+                                   double step_mant, int step_exp, iter_t iterations, uint32_t *steps, double *nu) {
     const Fx dc = fx_norm(ox * step_mant, oy * step_mant, step_exp);
     const int last = refn - 1;
     double ex = 0.0, ey = 0.0;
     int k = fx_zero(dc) ? 0 : dc.e;
     double dcx = dc.x, dcy = dc.y;          /* dc * 2^-k */
     double sk = fx_scale(k);                /* 2^k, or 0 when it is too small for a double */
-    int n = 0, cnt = 0;
+    int n = 0;
+    iter_t cnt = 0;
     uint32_t taken = 0;
     while (cnt < iterations) {
         taken++;

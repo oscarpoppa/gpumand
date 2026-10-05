@@ -13,7 +13,7 @@
 #include <string.h>
 #include <math.h>
 static int g_trace;
-#define PERT_TRACE(n, len, cnt) do { if (g_trace) fprintf(stderr, "%d %d %d\n", n, len, cnt); } while (0)
+#define PERT_TRACE(n, len, cnt) do { if (g_trace) fprintf(stderr, "%d %d %lld\n", n, len, (long long)(cnt)); } while (0)
 #include "../bla.h"
 #include "fx_reference.h"
 #include "../aspect.h"
@@ -31,7 +31,7 @@ int main(int argc, char **argv) {
     }
     const char *mode = argv[1];
     g_trace = getenv("PERT_TRACE") != NULL;
-    const int iterations = atoi(argv[3]);
+    const iter_t iterations = atoll(argv[3]);
     FILE *fp = fopen(argv[2], "rb");
     RefHeader h;
     if (!fp || fread(&h, sizeof(h), 1, fp) != 1) {
@@ -107,14 +107,14 @@ int main(int argc, char **argv) {
             fprintf(stderr, "pixel %d %d\n", px, py);
         uint32_t steps = 0;
         double nu = -1.0;
-        int cnt;
+        iter_t cnt;
         if (!strcmp(mode, "fx"))
             cnt = pert_pixel_fx(ref, refn, px - WIDTH / 2, py - HEIGHT / 2, h.step_mant, h.step_exp, iterations, &steps, &nu);
         else if (!strcmp(mode, "fxref"))
             cnt = pert_pixel_fx_ref(ref, refn, px - WIDTH / 2, py - HEIGHT / 2, h.step_mant, h.step_exp, iterations, &steps, &nu);
         else
             cnt = pert_pixel_dbl(ref, refn, bv, px - WIDTH / 2, py - HEIGHT / 2, step, iterations, &steps, &nu);
-        printf("%d %u %.17g\n", cnt, steps, nu);
+        printf("%lld %u %.17g\n", cnt, steps, nu);
     }
     free(mem);
     free(ref);

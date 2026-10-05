@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 import os
 from PyQt5.QtCore import QPoint, QRect, QSize, Qt, pyqtSlot
-from PyQt5.QtGui import QIcon, QPixmap
+from PyQt5.QtGui import QIcon, QKeySequence, QPixmap
 from PyQt5.QtWidgets import (QApplication, QComboBox, QDial, QDoubleSpinBox, QFileDialog, QFormLayout, QGroupBox, QHBoxLayout,
-                             QLabel, QLineEdit, QMessageBox, QPushButton, QRubberBand, QScrollArea, QSizePolicy, QVBoxLayout, QWidget)
+                             QLabel, QLineEdit, QMessageBox, QPushButton, QRubberBand, QScrollArea, QShortcut, QSizePolicy, QVBoxLayout, QWidget)
 from sys import argv, exit, stderr
 from subprocess import call, run as run_process     # `run` is the Run button below
 from shutil import copyfile
@@ -12,6 +12,7 @@ from math import ceil
 from configparser import ConfigParser
 from optparse import OptionParser
 from decimal import Decimal
+from cleanup import delete_files, generated_files, remove_stale_references, size_text, total_size
 from deepzoom import abbreviate, ITERATIONS, WIDTH, HEIGHT, PERTURB_BELOW, selection_to_region, write_reference
 
 
@@ -43,8 +44,10 @@ FALLBACK_PALETTES = ['twilight', 'fire', 'ocean', 'aurora', 'ice', 'sunset', 'gr
 MAPPINGS = ['histogram', 'linear', 'log']
 RESET_COORDS = (Decimal('-2.75'), Decimal('-1.333333'), Decimal('4.0'), 0)
 # Iteration multipliers offered (limit = ITERATIONS * multiplier). Deep views need many more
-# iterations than shallow ones; the large values are only practical with the BLA speedup.
-MULTIPLIERS = list(range(1, 31)) + [40, 50, 75, 100, 150, 200, 300, 500, 750, 1000]
+# iterations than shallow ones; the large values are only practical with the BLA speedup, and a view with
+# much of its area inside the set will take very long to draw at the top of the range.
+MULTIPLIERS = list(range(1, 31)) + [40, 50, 75, 100, 150, 200, 300, 500, 750, 1000, 2000, 5000, 10000, 20000, 50000,
+                                    100000, 200000, 500000, 1000000, 2000000, 5000000, 10000000, 20000000]
 PIX_WID = WIDTH
 PIX_HGT = HEIGHT
 WIN_WID = 1460
@@ -149,6 +152,57 @@ def on_color_change(*_):
     with WaitCurs():
         if recolor(MAP.curr):
             reg.setPixmap(QPixmap(image_path(MAP.curr)))
+
+
+def ask_cleanup(parent, count, size, reset=False):
+    """Ask whether to delete generated files: 'keep', 'delete' or 'cancel' (stay open / do not reset)."""
+    if reset:
+        title = 'Reset: delete old files?'
+        text = ('Reset clears your zoom history. {} files ({}) in {} belong to views you can no longer go back to.'
+                '\n\nDelete them? Copies you saved with Save are never touched.')
+        more = 'Keeping them leaves them on disk; later renders reuse the names and overwrite them.'
+    else:
+        title = 'Delete generated files?'
+        text = '{} generated files ({}) are in {}.\n\nDelete them? Copies you saved with Save are never touched.'
+        more = 'Keeping them lets you recolor earlier views without rendering again; the opening view is simply redrawn next time.'
+    box = QMessageBox(QMessageBox.Question, title, text.format(count, size_text(size), PIX_DIR), QMessageBox.NoButton, parent)
+    box.setInformativeText(more)
+    keep = box.addButton('Keep all', QMessageBox.AcceptRole)
+    delete = box.addButton('Delete all', QMessageBox.DestructiveRole)
+    cancel = box.addButton('Cancel', QMessageBox.RejectRole)
+    box.setDefaultButton(keep)
+    box.setEscapeButton(cancel)
+    box.exec_()
+    clicked = box.clickedButton()
+    return 'keep' if clicked is keep else 'delete' if clicked is delete else 'cancel'
+
+
+def offer_cleanup(files, reset=False):
+    """Let the user keep or delete `files`. False if they cancelled."""
+    if not files:
+        return True
+    choice = ask_cleanup(window, len(files), total_size(files), reset=reset)
+    if choice == 'cancel':
+        return False
+    if choice == 'delete':
+        failed = delete_files(files)
+        if failed:
+            QMessageBox.warning(window, 'Delete generated files', '{} files could not be deleted.'.format(failed))
+    return True
+
+
+def on_quit():
+    """Called as the window closes. True to go ahead and quit, False if the user chose to stay."""
+    remove_stale_references(PIX_DIR)
+    return offer_cleanup(generated_files(PIX_DIR))
+
+
+class MainWindow(QWidget):
+    def closeEvent(self, event):
+        if on_quit():
+            event.accept()
+        else:
+            event.ignore()
 
 
 def ensure_start_image():
@@ -373,6 +427,9 @@ def fset(item):
 
 @pyqtSlot()
 def on_reset():
+    remove_stale_references(PIX_DIR)
+    if not offer_cleanup(generated_files(PIX_DIR, opening=False), reset=True):
+        return          # the user cancelled the reset
     with WaitCurs():
         for i in reversed(range(scr_layout.count()-1)): 
             scr_layout.itemAt(i).widget().setParent(None)
@@ -451,13 +508,22 @@ def on_back():
 
 if __name__ == '__main__':
     app = QApplication(argv)
+    remove_stale_references(PIX_DIR)
     INITPG = PGINFO(XYWD_RESET, STARTFILE, get_tnail(STARTFILE), None)
     MAP = MTree()
-    window = QWidget()
+    window = MainWindow()
     reg = PicRegion()
     reg.setPixmap(QPixmap(STARTFILE))
     run = QPushButton('Run') 
     run.clicked.connect(on_run)
+    run.setToolTip('Render the selected region (Enter)')
+    # Enter (the main key and the keypad's) presses Run from anywhere in the window; a held key does not repeat it
+    run_keys = []
+    for key in (Qt.Key_Return, Qt.Key_Enter):
+        shortcut = QShortcut(QKeySequence(key), window)
+        shortcut.setAutoRepeat(False)
+        shortcut.activated.connect(run.click)
+        run_keys.append(shortcut)
     reset = QPushButton('Reset') 
     reset.clicked.connect(on_reset)
     back = QPushButton('Back') 

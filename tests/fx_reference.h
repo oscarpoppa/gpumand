@@ -7,12 +7,13 @@
 #include "../pert.h"
 
 /* step = step_mant * 2^step_exp is the pixel spacing; ox, oy are pixel offsets from the centre */
-HD static inline int pert_pixel_fx_ref(const Cd *ref, int refn, double ox, double oy,
-                                   double step_mant, int step_exp, int iterations, uint32_t *steps, double *nu) {
+HD static inline iter_t pert_pixel_fx_ref(const Cd *ref, int refn, double ox, double oy,
+                                   double step_mant, int step_exp, iter_t iterations, uint32_t *steps, double *nu) {
     const Fx dc = fx_norm(ox * step_mant, oy * step_mant, step_exp);
     const int last = refn - 1;
     Fx d = fx_norm(0.0, 0.0, 0);
-    int n = 0, cnt = 0;
+    int n = 0;
+    iter_t cnt = 0;
     uint32_t taken = 0;
     while (cnt < iterations) {
         taken++;

@@ -600,3 +600,20 @@ class Abbreviate(unittest.TestCase):
         d = Decimal('-0.74364388724000000000000000000000003333299963')
         self.assertEqual(deepzoom.abbreviate(d), '-0.743643887…3299963')
         self.assertEqual(deepzoom.abbreviate(Decimal('1.2345678901234567890123456789012345678E-700')), '1.23456789…2345678e-700')
+
+
+class ReferenceLength(unittest.TestCase):
+    def test_orbit_is_capped_however_high_the_limit(self):
+        # a point inside the set never escapes, so the orbit stops only at the cap
+        old = deepzoom.MAX_REFERENCE
+        deepzoom.MAX_REFERENCE = 250
+        try:
+            orbit = deepzoom.reference_orbit('0', '0', '1e-3', 40000000000)
+        finally:
+            deepzoom.MAX_REFERENCE = old
+        self.assertEqual(len(orbit) // 2, 251)     # Z_0 plus 250 steps
+
+    def test_the_cap_fits_what_the_renderers_load(self):
+        header = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'refio.h')).read()
+        self.assertIn('#define MAX_REF_POINTS (1u << 24)', header)
+        self.assertEqual(deepzoom.MAX_REFERENCE + 1, 1 << 24)

@@ -27,7 +27,7 @@ typedef double2 cudaDoubleComplex;
 typedef struct {
     cudaDoubleComplex llft;
     double ledg;
-    int ilev;
+    unsigned ilev;
 } Init;
 
 // The kernels write one smooth iteration count per pixel (-1 where the point never escapes);
@@ -35,8 +35,8 @@ typedef struct {
 
 // Plain double-precision iteration. Good down to a view width of ~1e-9.
 __global__ void MandKern(double* dev_nu_ptr, const Init* dev_init_ptr) {
-    int cnt = 0;
-    const int iterations = ITERATIONS * dev_init_ptr->ilev;
+    iter_t cnt = 0;
+    const iter_t iterations = (iter_t)ITERATIONS * dev_init_ptr->ilev;
     const int pix_x = blockIdx.x * blockDim.x + threadIdx.x;
     const int pix_y = blockIdx.y * blockDim.y + threadIdx.y;
     // pixels are square: both axes advance by ledg/WIDTH (the view height is ledg*HEIGHT/WIDTH)
@@ -56,14 +56,14 @@ __global__ void MandKern(double* dev_nu_ptr, const Init* dev_init_ptr) {
 
 // Perturbation off an arbitrary-precision reference orbit (see pert.h), with BLA skipping
 // when bv.nlev > 0. Pixel spacing `step` is a double, so views down to ~1e-250.
-__global__ void MandKernPert(const Cd* ref, const int refn, const BlaView bv, const double step, double* dev_nu_ptr, const int iterations) {
+__global__ void MandKernPert(const Cd* ref, const int refn, const BlaView bv, const double step, double* dev_nu_ptr, const iter_t iterations) {
     const int pix_x = blockIdx.x * blockDim.x + threadIdx.x;
     const int pix_y = blockIdx.y * blockDim.y + threadIdx.y;
     pert_pixel_dbl(ref, refn, bv, pix_x - WIDTH / 2, pix_y - HEIGHT / 2, step, iterations, NULL, &dev_nu_ptr[WIDTH*pix_y+pix_x]);
 }
 
 // Same, for views too deep for a double's exponent: the delta carries its own exponent.
-__global__ void MandKernPertFx(const Cd* ref, const int refn, const double step_mant, const int step_exp, double* dev_nu_ptr, const int iterations) {
+__global__ void MandKernPertFx(const Cd* ref, const int refn, const double step_mant, const int step_exp, double* dev_nu_ptr, const iter_t iterations) {
     const int pix_x = blockIdx.x * blockDim.x + threadIdx.x;
     const int pix_y = blockIdx.y * blockDim.y + threadIdx.y;
     pert_pixel_fx(ref, refn, pix_x - WIDTH / 2, pix_y - HEIGHT / 2, step_mant, step_exp, iterations, NULL, &dev_nu_ptr[WIDTH*pix_y+pix_x]);
@@ -80,7 +80,7 @@ int main(int argc, char **argv) {
     istruct.llft.y = init->lleft.imag;
     istruct.ledg = init->lleft.length;
     istruct.ilev = init->interleave;
-    const int iterations = ITERATIONS * (int)init->interleave;
+    const iter_t iterations = (iter_t)ITERATIONS * init->interleave;
     if (init->refname[0])
         refhost = load_ref(init->refname, &rh);
     CUDA_CHECK(cudaSetDevice(0));

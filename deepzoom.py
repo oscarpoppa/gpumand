@@ -97,8 +97,15 @@ def selection_to_region(x, y, w, pixx, pixy, pixw, pixwid, pixhgt):
                 w * pixw / pixwid)
 
 
+MAX_REFERENCE = (1 << 24) - 1     # longest reference orbit the renderers load (refio.h MAX_REF_POINTS, less the start)
+
+
 def reference_orbit(x, y, w, maxiter):
-    """Orbit of the view's centre, as an array('d') of re, im, re, im, ..."""
+    """Orbit of the view's centre, as an array('d') of re, im, re, im, ...
+
+    The orbit is cut off at MAX_REFERENCE steps however high the iteration limit is: a pixel that outlasts the
+    reference starts over from it (rebasing), so very large limits need no longer orbit."""
+    maxiter = min(maxiter, MAX_REFERENCE)
     x, y, w = Decimal(x), Decimal(y), Decimal(w)
     bits = max(128, int(-w.adjusted() * 3.33) + 192)
     out = array('d', [0.0, 0.0])

@@ -31,9 +31,9 @@ static void say(const char *path) {
 
 /* Plain double iteration, as MandKern in mand-main.cu. Good down to a view width of ~1e-9.
  * Returns the smooth iteration count, or -1 if the point never escapes. */
-static double plain_pixel(double cx, double cy, int iterations) {
+static double plain_pixel(double cx, double cy, iter_t iterations) {
     double zx = 0.0, zy = 0.0;
-    for (int cnt = 0; cnt < iterations; cnt++) {
+    for (iter_t cnt = 0; cnt < iterations; cnt++) {
         const double nux = zx * zx - zy * zy + cx;
         zy = 2.0 * zx * zy + cy;
         zx = nux;
@@ -46,7 +46,7 @@ static double plain_pixel(double cx, double cy, int iterations) {
 
 int main(int argc, char **argv) {
     RunStart *init = get_coords(argc, argv);
-    const int iterations = ITERATIONS * (int)init->interleave;
+    const iter_t iterations = (iter_t)ITERATIONS * init->interleave;
     double *nu = (double*)malloc((size_t)HEIGHT * WIDTH * sizeof(double));
     uint32_t *pixarr = (uint32_t*)malloc((size_t)HEIGHT * WIDTH * sizeof(uint32_t));
     if (!nu || !pixarr) {
