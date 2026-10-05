@@ -127,13 +127,13 @@ def drive():
           window.height() >= window.minimumSizeHint().height(), (window.size(), window.minimumSizeHint()))
 
     # -- the view starts on the full set
-    check('starts at the reset view', (g['xbox'].text(), g['wbox'].text()) == ('-2.0', '4.0'),
+    check('starts at the reset view', (g['xbox'].text(), g['wbox'].text()) == ('-2.75', '4.0'),
           (g['xbox'].text(), g['wbox'].text()))
 
     # -- a selection becomes exact Decimal coordinates
     release(g, 300, 500, 600)
     x, w = Decimal(g['xbox'].text()), Decimal(g['wbox'].text())
-    check('selection maps to exact coordinates', (x, w) == (Decimal('-1'), Decimal('2')), (x, w))
+    check('selection maps to exact coordinates', (x, w) == (Decimal('-1.75'), Decimal('2')), (x, w))
     check('reset constant is not mutated by selections', str(g['LOG_RESET'].w) == '4.0', g['LOG_RESET'].w)
 
     def image_ok(path):
@@ -152,7 +152,7 @@ def drive():
         check('real renderer produced a proper image', image_ok(MAP.curr.fname), MAP.curr.fname)
     else:
         first = [c.split() for c in calls() if c.strip() and 'mandapp0.bmp' in c][0]    # (the start-up render comes before it)
-        check('mand called with x y w file multiplier', len(first) >= 5 and Decimal(first[0]) == -1 and Decimal(first[2]) == 2, first)
+        check('mand called with x y w file multiplier', len(first) >= 5 and Decimal(first[0]) == Decimal('-1.75') and Decimal(first[2]) == 2, first)
         check('mand is told the colour settings and where to save the counts',
               '--palette=twilight' in first and '--mapping=histogram' in first and any(f.startswith('--nu-out=') for f in first), first)
 

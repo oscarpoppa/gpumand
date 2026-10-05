@@ -41,7 +41,7 @@ STARTFILE = os.path.join(PIX_DIR, 'whole.bmp')
 COLORIZE = os.path.join(BIN_DIR, 'colorize')
 FALLBACK_PALETTES = ['twilight', 'fire', 'ocean', 'aurora', 'ice', 'sunset', 'gray', 'rainbow', 'classic']
 MAPPINGS = ['histogram', 'linear', 'log']
-RESET_COORDS = (Decimal('-2.0'), Decimal('-1.333333'), Decimal('4.0'), 0)
+RESET_COORDS = (Decimal('-2.75'), Decimal('-1.333333'), Decimal('4.0'), 0)
 # Iteration multipliers offered (limit = ITERATIONS * multiplier). Deep views need many more
 # iterations than shallow ones; the large values are only practical with the BLA speedup.
 MULTIPLIERS = list(range(1, 31)) + [40, 50, 75, 100, 150, 200, 300, 500, 750, 1000]
