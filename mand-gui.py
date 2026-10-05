@@ -118,6 +118,19 @@ def current_colors():
     return (pal_box.currentText(), map_box.currentText(), scale_box.value(), shift_box.value())
 
 
+def set_color_controls(palette, mapping, scale, shift):
+    """Show these color settings in the Colors box without recoloring anything (the picture already has them)."""
+    for box in (pal_box, map_box, scale_box, shift_box):
+        box.blockSignals(True)
+    if pal_box.findText(palette) >= 0:
+        pal_box.setCurrentText(palette)
+    map_box.setCurrentText(mapping)
+    scale_box.setValue(scale)
+    shift_box.setValue(shift)
+    for box in (pal_box, map_box, scale_box, shift_box):
+        box.blockSignals(False)
+
+
 def view_meta(item):
     """The text fields describing a view, for its PNG."""
     palette, mapping, scale, shift = VIEW_COLORS.get(item.fname) or current_colors()
@@ -553,6 +566,8 @@ def fset(item):
     reg.cand_xyw.w = item.xywd.w
     reg.cand_xyw.d = int(item.xywd.d)
     inter.setCurrentIndex(int(item.xywd.d))
+    if item.fname in VIEW_COLORS:               # every control describes this view, not whatever was used before
+        set_color_controls(*VIEW_COLORS[item.fname])
     reg.setPixmap(load_pixmap(image_path(item)))
     for mem in MAP:
         mem.icon.setFlat(True)
@@ -606,6 +621,8 @@ def on_reset():
             scr_layout.itemAt(i).widget().setParent(None)
         for key in [k for k in SHOWN if k != STARTFILE]:
             del SHOWN[key]       # those file names will be rendered afresh
+        for key in [k for k in VIEW_COLORS if k != STARTFILE]:
+            del VIEW_COLORS[key]
         fset(MAP.reset())
 
 
@@ -892,6 +909,7 @@ if __name__ == '__main__':
     window.setLayout(wholescr) 
     window.setWindowTitle(TITLE)
     window.setStyleSheet(DARK_STYLE)
+    VIEW_COLORS[STARTFILE] = current_colors()      # the opening view's settings are the starting ones
     ensure_start_image()
     fset(MAP.curr)
     # fit the layout (it can be enlarged; the fields grow with the window)

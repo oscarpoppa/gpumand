@@ -64,7 +64,7 @@ Run it:
 |---|---|
 | Drag on the picture | Draws a selection box (always the picture's own shape). Its exact coordinates appear on the right. |
 | **Run** (or **Enter**) | Draws the selection. If you haven't made a new selection, it redraws the current view in place, which is how you apply a new iteration limit. |
-| **Back**, thumbnails | Return to an earlier view. The selected thumbnail has a tiny **×** in its corner: it deletes that view and all of its files (after asking), and shows the view before it. Views that were zoomed from the deleted one now hang from its parent, so **Back** always goes to the next real view back. The opening view has no ×. |
+| **Back**, thumbnails | Return to an earlier view. Every control (coordinates, multiplier, palette, mapping, scale, shift) then shows that view's own settings, and a region boxed from it starts from them, not from whatever you used last. The selected thumbnail has a tiny **×** in its corner: it deletes that view and all of its files (after asking), and shows the view before it. Views that were zoomed from the deleted one now hang from its parent, so **Back** always goes to the next real view back. The opening view has no ×. |
 | **Save** | Writes the picture on screen as a PNG (see below). |
 | **Open a saved view...** | Draws a view from a PNG this program saved. |
 | **Reset** | Back to the whole set (it may ask about old files first). |

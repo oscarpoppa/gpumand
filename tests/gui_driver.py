@@ -779,6 +779,157 @@ def drive():
     g['confirm_delete'] = lambda parent, count, size: True
     g['on_reset']()
 
+    # -- selecting a view shows that view's own settings in every control
+    # (Changing the Colors box repaints the view that is selected, when it can be repainted, so each view's settings
+    # are whatever its picture was last given: read from the program's record of them, and checked to differ.)
+    pal, mapping, scale, shift = g['pal_box'], g['map_box'], g['scale_box'], g['shift_box']
+
+    def set_controls(p, m, sc, sh, mult=None):
+        pal.setCurrentText(p)
+        mapping.setCurrentText(m)
+        scale.setValue(sc)
+        shift.setValue(sh)
+        if mult is not None:
+            g['inter'].setCurrentIndex(mult)
+    g['on_reset']()
+    set_controls('fire', 'log', 30.0, 0.25, 2)
+    release(g, 300, 500, 600)
+    g['on_run']()
+    V1 = MAP.curr
+    set_controls('ice', 'linear', 0.0, -0.5, 4)
+    release(g, 100, 100, 400)
+    g['on_run']()
+    V2 = MAP.curr
+    set_controls('gray', 'histogram', 7.0, 0.9)            # (repaints V2 when it can)
+    rec = g['VIEW_COLORS']
+
+    def shows(item):
+        """What every control currently says, and what it should say for this view."""
+        got = {'palette': pal.currentText(), 'mapping': mapping.currentText(), 'scale': scale.value(), 'shift': shift.value(),
+               'multiplier': g['inter'].currentIndex(), 'dial': g['iter_dial'].value(),
+               'x': Decimal(exact(g, 'xbox')), 'y': Decimal(exact(g, 'ybox')), 'w': Decimal(exact(g, 'wbox'))}
+        colors = rec[item.fname]
+        want = {'palette': colors[0], 'mapping': colors[1], 'scale': colors[2], 'shift': colors[3], 'multiplier': int(item.xywd.d),
+                'dial': int(item.xywd.d), 'x': Decimal(item.xywd.x), 'y': Decimal(item.xywd.y), 'w': Decimal(item.xywd.w)}
+        return got, want
+
+    check('the two views have different color settings and different multipliers', rec[V1.fname] != rec[V2.fname] and V1.xywd.d != V2.xywd.d,
+          (rec[V1.fname], rec[V2.fname]))
+    if REAL:        # with the real recolorer the records are exactly what was last applied to each picture
+        check('each view\'s record is what its picture was last given', rec[V1.fname] == ('ice', 'linear', 0.0, -0.5) and
+              rec[V2.fname] == ('gray', 'histogram', 7.0, 0.9), (rec[V1.fname], rec[V2.fname]))
+    V1.icon.click()
+    got, want = shows(V1)
+    check('selecting a view shows ITS palette, mapping, scale, shift, multiplier, dial and coordinates', got == want and got['multiplier'] == 2,
+          (got, want))
+    V2.icon.click()
+    got, want = shows(V2)
+    check('selecting another view replaces them with that view\'s own, not the ones used before', got == want and got['multiplier'] == 4 and
+          (got['palette'], got['shift']) == (rec[V2.fname][0], rec[V2.fname][3]), (got, want))
+    set_controls('sunset', 'log', 12.0, 0.4)                # change V2's colors, then go to V1 and back
+    after_change = rec[V2.fname]
+    V1.icon.click()
+    got, want = shows(V1)
+    check('...and the settings just used on another view do not carry over', got == want and rec[V1.fname] != ('sunset', 'log', 12.0, 0.4), (got, want))
+    V2.icon.click()
+    got, want = shows(V2)
+    check('a view keeps the colors it was last given', got == want and rec[V2.fname] == after_change, (got, want))
+    V1.icon.click()
+    g['on_back']()
+    got, want = shows(MAP.curr) if MAP.curr.fname in rec else (None, None)
+    check('Back shows the earlier view\'s settings too', MAP.curr.fname == g['STARTFILE'] and got == want, (MAP.curr.fname, got, want))
+    # -- zooming from an earlier view starts from THAT view's settings, not whatever was last put in the controls
+    g['on_reset']()
+    set_controls('fire', 'log', 30.0, 0.25, 2)
+    release(g, 300, 500, 600)
+    g['on_run']()
+    P = MAP.curr                                          # the view to come back to
+    set_controls('ice', 'linear', 0.0, -0.5, 4)
+    release(g, 100, 100, 400)
+    g['on_run']()
+    Q = MAP.curr
+    set_controls('gray', 'histogram', 7.0, 0.9, 6)       # "new settings" left in the controls
+    P.icon.click()                                        # fall back to P, then box a part of it
+    release(g, 200, 200, 300)
+    ncalls = len(calls())
+    g['on_run']()
+    R = MAP.curr
+    check('the new view is a child of the view it was boxed from', R.parent == P.fname, (R.parent, P.fname))
+    check('it inherits that view\'s multiplier, not the one left in the controls', R.xywd.d == P.xywd.d and R.xywd.d != 6, (R.xywd.d, P.xywd.d))
+    check('it inherits that view\'s colors, not the ones left in the controls', rec[R.fname] == rec[P.fname] and rec[R.fname][0] != 'gray',
+          (rec[R.fname], rec[P.fname]))
+    if not REAL:
+        line = [c.split() for c in calls() if c.strip() and c.split()[0] != 'REF_EXISTED'][-1]
+        check('the renderer was asked for that view\'s settings', line[4] == str(g['MULTIPLIERS'][int(P.xywd.d)]) and
+              '--palette=' + rec[P.fname][0] in line and '--mapping=' + rec[P.fname][1] in line, line)
+    got, want = shows(R)
+    check('and every control shows the new view\'s settings (which are the old view\'s)', got == want, (got, want))
+    # the same from the opening view, even though nothing was ever drawn from it with a recolorer
+    set_controls('aurora', 'linear', 9.0, 0.3, 5)
+    g['INITPG'].icon.click()
+    got = (pal.currentText(), mapping.currentText(), scale.value(), shift.value(), g['inter'].currentIndex())
+    check('selecting the opening view shows its own settings', got == (*rec[g['STARTFILE']], int(g['INITPG'].xywd.d)) and got[0] != 'aurora' and got[4] != 5, got)
+    release(g, 300, 500, 600)
+    g['on_run']()
+    S0 = MAP.curr
+    check('a view boxed from the opening view starts from the opening view\'s settings',
+          S0.parent == g['STARTFILE'] and rec[S0.fname] == rec[g['STARTFILE']] and S0.xywd.d == g['INITPG'].xywd.d, (rec[S0.fname], rec[g['STARTFILE']]))
+    # settings changed AFTER selecting the view are the user's choice and do apply
+    set_controls(pal.currentText(), mapping.currentText(), scale.value(), shift.value(), 3)
+    release(g, 100, 100, 400)
+    g['on_run']()
+    check('a multiplier chosen after selecting the view is used', MAP.curr.xywd.d == 3, MAP.curr.xywd)
+
+    # -- the case as the user put it: the palette control says rainbow, an ocean image is selected, a piece of it is boxed
+    g['on_reset']()
+    set_controls('ocean', 'histogram', 0.0, 0.0, 0)
+    release(g, 300, 500, 600)
+    g['on_run']()
+    ocean_view = MAP.curr
+    release(g, 100, 100, 400)
+    g['on_run']()                                         # another view, zoomed from the ocean one
+    set_controls('rainbow', 'histogram', 0.0, 0.0)        # ...which is then given rainbow
+    check('(the palette control says rainbow)', pal.currentText() == 'rainbow')
+    ocean_view.icon.click()
+    check('selecting the ocean image puts ocean in the palette control', pal.currentText() == 'ocean', pal.currentText())
+    release(g, 200, 200, 300)
+    g['on_run']()
+    blown_up = MAP.curr
+    check('a piece blown up from the ocean image comes up ocean, not rainbow',
+          blown_up.parent == ocean_view.fname and rec[blown_up.fname][0] == 'ocean' and pal.currentText() == 'ocean', (rec[blown_up.fname], pal.currentText()))
+    if not REAL:
+        line = [c.split() for c in calls() if c.strip() and c.split()[0] != 'REF_EXISTED'][-1]
+        check('the renderer was told --palette=ocean', '--palette=ocean' in line and '--palette=rainbow' not in line, line)
+    else:
+        expected_file = os.path.join(tmp, 'ocean-check.bmp')
+        subprocess.run([os.path.join(tmp, 'colorize'), blown_up.fname + '.nu', expected_file, '--palette=ocean', '--mapping=histogram'],
+                       check=True, capture_output=True)
+        check('the drawn picture is exactly what the ocean palette makes',
+              open(g['image_path'](blown_up), 'rb').read() == open(expected_file, 'rb').read())
+
+    # selecting only looks: nothing is recolored or redrawn, no files change
+    files_now = {n: os.path.getmtime(os.path.join(pix, n)) for n in os.listdir(pix)}
+    recolors, real_recolor = [], g['recolor']
+    g['recolor'] = lambda it: (recolors.append(it.fname), real_recolor(it))[1]
+    calls_before = len(calls())
+    for item in (V2, V1, V2):
+        item.icon.click()
+    g['recolor'] = real_recolor
+    check('selecting views recolors nothing, renders nothing and changes no file',
+          not recolors and len(calls()) == calls_before and {n: os.path.getmtime(os.path.join(pix, n)) for n in os.listdir(pix)} == files_now,
+          (recolors, len(calls()) - calls_before))
+    V1.icon.click()
+    check('the picture on screen is the selected view\'s own file', g['reg'].source.toImage() == QtGui.QImage(g['image_path'](V1)))
+    # a Reset forgets the settings of the views it throws away (but not the opening view's)
+    g['ask_cleanup'] = lambda parent, count, size, reset=False: 'keep'
+    g['on_reset']()
+    check('Reset forgets the old views\' settings', V1.fname not in g['VIEW_COLORS'] and V2.fname not in g['VIEW_COLORS'], list(g['VIEW_COLORS']))
+    g['inter'].setCurrentIndex(0)
+    for box, value in ((pal, 'twilight'), (mapping, 'histogram')):
+        box.setCurrentText(value)
+    scale.setValue(0.0)
+    shift.setValue(0.0)
+
     # -- Reset offers to delete the files of the views it throws away (but keeps the opening view's)
     pix_dir = g['PIX_DIR']
     g['on_reset']()
