@@ -1,9 +1,9 @@
 /*
- * CPU renderer: a drop-in for the CUDA `mand` that needs no GPU.
+ * CPU renderer: a drop-in for the CUDA `mand-gpu` that needs no GPU.
  *
  *   mand-cpu llreal llimag width filename interleave [reference_orbit_file] [options]
  *
- * Same arguments, same output file, same three paths as mand-main.cu (plain double, perturbation
+ * Same arguments, same output file, same three paths as mand-gpu.cu (plain double, perturbation
  * with BLA, floatexp), sharing the per-pixel code in pert.h. Rows are spread over threads with
  * OpenMP; set OMP_NUM_THREADS to control how many, and MAND_VERBOSE=1 to have it say which path
  * it took on stderr. Pixels are computed as smooth iteration counts and colored on the host
@@ -29,7 +29,7 @@ static void say(const char *path) {
         fprintf(stderr, "mand-cpu: %s path\n", path);
 }
 
-/* Plain double iteration, as MandKern in mand-main.cu. Good down to a view width of ~1e-9.
+/* Plain double iteration, as MandKern in mand-gpu.cu. Good down to a view width of ~1e-9.
  * Returns the smooth iteration count, or -1 if the point never escapes. */
 static double plain_pixel(double cx, double cy, iter_t iterations) {
     double zx = 0.0, zy = 0.0;

@@ -32,11 +32,16 @@ except Exception:
     exit(1)
 
 TITLE = 'Mandelbrot Set Viewer'
-# bin_dir is where `mand` and pix/ live; it defaults to this script's directory
+# bin_dir is where `mand-gpu` and pix/ live; it defaults to this script's directory
 BIN_DIR = paths.get('bin_dir', os.path.dirname(os.path.abspath(__file__)))
 SAVE_DIR = paths.get('save_dir', os.path.expanduser('~'))
-# renderer is the program in bin_dir that draws the images: `mand` (CUDA) or `mand-cpu` (no GPU)
-RENDERER = paths.get('renderer', 'mand')
+# renderer is the program in bin_dir that draws the images: `mand-gpu` (CUDA) or `mand-cpu` (no GPU)
+def resolve_renderer(name):
+    """The renderer's program name. `mand` is what mand-gpu used to be called, so older ini files still work."""
+    return 'mand-gpu' if name == 'mand' else name
+
+
+RENDERER = resolve_renderer(paths.get('renderer', 'mand-gpu'))
 PIX_DIR = os.path.join(BIN_DIR, 'pix')
 STARTFILE = os.path.join(PIX_DIR, 'whole.bmp')
 # colorize recolors a saved image (the renderer's smooth iteration counts) without rendering again

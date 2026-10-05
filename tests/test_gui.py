@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Runs tests/gui_driver.py, which drives the real mand-gui.py under an offscreen Qt platform
-with a fake `mand` binary. Skipped when PyQt5 is not installed."""
+with a fake `mand-gpu` binary. Skipped when PyQt5 is not installed."""
 import os
 import shutil
 import subprocess

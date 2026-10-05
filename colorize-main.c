@@ -1,5 +1,5 @@
 /*
- * colorize: recolor raw smooth-iteration-count files (written by `mand --nu-out=`) without rendering.
+ * colorize: recolor raw smooth-iteration-count files (written by `mand-gpu --nu-out=`) without rendering.
  *
  *   colorize IN.nu OUT.bmp [--palette=NAME] [--mapping=...] [--scale=N] [--shift=N] [--interior=RRGGBB]
  *   colorize --list-palettes

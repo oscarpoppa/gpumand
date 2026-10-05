@@ -26,14 +26,28 @@ class Makefile(unittest.TestCase):
 
     def test_default_target_builds_the_cuda_renderer_and_colorize_only(self):
         text = plan()
-        self.assertEqual(built(text), {'mand', 'colorize'})
+        self.assertEqual(built(text), {'mand-gpu', 'colorize'})
         self.assertIn('nvcc', text)
+
+    def test_gpu_target_builds_mand_gpu_and_colorize_and_matches_the_default(self):
+        text = plan('gpu')
+        self.assertEqual(built(text), {'mand-gpu', 'colorize'})
+        self.assertIn('nvcc', text)
+        self.assertEqual(built(text), built(plan()))
+
+    def test_the_gpu_program_comes_from_a_source_named_like_the_cpu_one(self):
+        self.assertTrue(os.path.exists(os.path.join(ROOT, 'mand-gpu.cu')) and os.path.exists(os.path.join(ROOT, 'mand-cpu.c')))
+        self.assertFalse(os.path.exists(os.path.join(ROOT, 'mand-main.cu')))
+
+    def test_clean_removes_the_old_program_name_too(self):
+        out = subprocess.run(['make', '-n', 'clean'], cwd=ROOT, capture_output=True, text=True).stdout
+        self.assertTrue(all(name in out.split() for name in ('mand-gpu', 'mand-cpu', 'colorize', 'mand')), out)
 
     def test_cpu_is_the_same_as_the_two_named_targets(self):
         self.assertEqual(built(plan('cpu')), built(plan('mand-cpu', 'colorize')))
 
     def test_everything_can_be_built_together(self):
-        self.assertEqual(built(plan('all', 'cpu')), {'mand', 'mand-cpu', 'colorize'})
+        self.assertEqual(built(plan('all', 'cpu')), {'mand-gpu', 'mand-cpu', 'colorize'})
 
 
 if __name__ == '__main__':

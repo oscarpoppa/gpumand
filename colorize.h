@@ -1,7 +1,7 @@
 #ifndef __COLORIZE_H
 #define __COLORIZE_H
 /*
- * Turns the renderers' smooth iteration counts (nu) into colors, on the host, so `mand`, `mand-cpu`
+ * Turns the renderers' smooth iteration counts (nu) into colors, on the host, so `mand-gpu`, `mand-cpu`
  * and the `colorize` tool all color identically and an image can be recolored without rendering
  * again.
  *
