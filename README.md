@@ -34,7 +34,7 @@ When you quit with any of them present, the program shows how many there are and
 delete them all (Cancel stays open). Choosing Keep all opens a folder chooser and keeps the pictures (each becomes a PNG that remembers its view and can be reopened; the raw `.nu` counts are not kept, they are deleted) in a new dated folder (`mandelbrot-YYYYmmdd-HHMMSS`)
 inside the folder you pick, so nothing already there is overwritten; picking `pix/` itself leaves them where they are, and cancelling the chooser
 cancels the quit or reset. Reset asks the same about the views it is about to throw away (not the opening view's own files); Cancel
-there means don't reset. Deleting only removes files the program itself made, by exact name, in `pix/`; copies you saved with Save,
+there means don't reset. If only the opening view's own files are left when you quit (a Reset keeps them), they are removed without asking; they are redrawn at the next start. Deleting only removes files the program itself made, by exact name, in `pix/`; copies you saved with Save,
 and the shipped `pix/whole.bmp`, are never touched. Keeping them lets you recolor earlier views without rendering again. Leftover reference
 orbit files (`.ref`, normally deleted right after each render) older than an hour are removed automatically at start-up and on quit.
 

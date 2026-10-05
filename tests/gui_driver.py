@@ -738,6 +738,27 @@ def drive():
     window.show()
     asked.clear()
     check('with nothing to delete there is no prompt', window.close() is True and not asked, asked)
+    # only the opening view's files left (what Reset spares): no prompt, they are quietly removed
+    window.show()
+    only_opening = [os.path.join(pix_dir, n) for n in ('whole-start.bmp', 'whole.bmp.nu')]
+    for f in only_opening:
+        open(f, 'wb').write(b'opening view')
+    asked.clear()
+    check('with only the opening view\'s files left, quitting does not ask', window.close() is True and not asked, asked)
+    check('...and removes them', not any(os.path.exists(f) for f in only_opening))
+    check('...but never whole.bmp or other files', all(os.path.exists(f) for f in guard))
+    # opening files plus anything else: the prompt appears and counts them all
+    window.show()
+    extra = os.path.join(pix_dir, 'mandapp88.bmp')
+    for f in only_opening + [extra]:
+        open(f, 'wb').write(b'x')
+    asked.clear()
+    answer('cancel')
+    check('with other files too the prompt appears and counts the opening files as well',
+          window.close() is False and asked and asked[-1][0] == 3, asked)
+    for f in only_opening + [extra]:
+        os.remove(f)
+    answer('keep')
 
     # -- Keep all asks where to keep the files, and moves them there (into a new dated folder, never overwriting)
     dest = os.path.join(tmp, 'kept')

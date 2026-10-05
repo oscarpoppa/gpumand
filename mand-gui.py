@@ -273,7 +273,11 @@ def offer_cleanup(files, reset=False):
 def on_quit():
     """Called as the window closes. True to go ahead and quit, False if the user chose to stay."""
     remove_stale_references(PIX_DIR)
-    return offer_cleanup(generated_files(PIX_DIR))
+    files = generated_files(PIX_DIR)
+    if not generated_files(PIX_DIR, opening=False):
+        delete_files(files)     # only the opening view's files are left (Reset keeps them): cheap to redraw, not worth asking about
+        return True
+    return offer_cleanup(files)
 
 
 class MainWindow(QWidget):
