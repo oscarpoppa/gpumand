@@ -16,6 +16,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import zlib
 from decimal import Decimal, localcontext
 
 import gmpy2
@@ -23,7 +24,7 @@ import gmpy2
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')
 sys.path.insert(0, ROOT)
 import deepzoom
-from deepzoom import WIDTH, HEIGHT
+from deepzoom import WIDTH, HEIGHT, BAILOUT2
 
 MAXITER = 3000
 # The Misiurewicz point c = i has self-similar spiral structure at every scale, so
@@ -73,7 +74,7 @@ def perturb_count(ref, step, pix_x, pix_y, iterations):
         n += 1
         cnt += 1
         z = ref[n] + nd
-        if z.real * z.real + z.imag * z.imag > 4.0:
+        if z.real * z.real + z.imag * z.imag > BAILOUT2:
             return cnt - 1
         if abs(z) ** 2 < abs(nd) ** 2 or n >= refn - 1:
             d = z
@@ -93,9 +94,32 @@ def exact_count(x, y, w, pix_x, pix_y, iterations):
         zr = zi = gmpy2.mpfr(0)
         for cnt in range(iterations):
             zr, zi = zr * zr - zi * zi + cr, 2 * zr * zi + ci
-            if zr * zr + zi * zi > 4:
+            if zr * zr + zi * zi > BAILOUT2:
                 return cnt
     return iterations
+
+
+def smooth_nu(idx, zz):
+    """Python mirror of smooth_nu() in pert.h."""
+    import math
+    nu = idx + 2.0 - math.log2(0.5 * math.log2(zz))
+    return max(nu, 0.0)
+
+
+def exact_nu(x, y, w, pix_x, pix_y, iterations):
+    """(escape index, smooth iteration count) by direct iteration at high precision; (iterations, -1.0) inside."""
+    bits = max(128, int(-w.adjusted() * 3.33) + 192)
+    with gmpy2.context(precision=bits):
+        step = gmpy2.mpfr(str(w)) / WIDTH
+        cr = gmpy2.mpfr(str(x)) + step * pix_x
+        ci = gmpy2.mpfr(str(y)) + step * pix_y
+        zr = zi = gmpy2.mpfr(0)
+        for cnt in range(iterations):
+            zr, zi = zr * zr - zi * zi + cr, 2 * zr * zi + ci
+            zz = zr * zr + zi * zi
+            if zz > BAILOUT2:
+                return cnt, smooth_nu(cnt, float(zz))
+    return iterations, -1.0
 
 
 def plain_double_count(x, y, step, pix_x, pix_y, iterations):
@@ -104,7 +128,7 @@ def plain_double_count(x, y, step, pix_x, pix_y, iterations):
     z = 0j
     for cnt in range(iterations):
         z = z * z + c
-        if z.real * z.real + z.imag * z.imag > 4.0:
+        if z.real * z.real + z.imag * z.imag > BAILOUT2:
             return cnt
     return iterations
 
@@ -153,11 +177,12 @@ class ReferenceFile(unittest.TestCase):
         self.assertAlmostEqual(ref.step_mant * 2.0 ** ref.step_exp, 3 / 1200.0, places=15)
 
     def test_stops_at_escape(self):
-        # centre 1+0i escapes at Z3 = 5
+        # centre 1+0i runs 0, 1, 2, 5, 26, 677 and stops at the first value past the escape radius
         x, y = view_for_center(Decimal('1'), Decimal('0'), Decimal('1e-3'))
         ref = self.roundtrip(x, y, '1e-3', 100)
-        self.assertEqual(len(ref.orbit), 4)
-        self.assertGreater(abs(ref.orbit[-1]), 2)
+        self.assertEqual([round(abs(z)) for z in ref.orbit], [0, 1, 2, 5, 26, 677])
+        self.assertGreater(abs(ref.orbit[-1]) ** 2, BAILOUT2)
+        self.assertLess(abs(ref.orbit[-2]) ** 2, BAILOUT2)
 
     def test_step_survives_beyond_double_range(self):
         x, y = view_for_center(SPIRAL[0], SPIRAL[1], Decimal('1e-400'))
@@ -167,7 +192,9 @@ class ReferenceFile(unittest.TestCase):
         self.assertLess(ref.step_exp, -1300)  # 1e-400/1200 ~ 2^-1339
 
 
-class Perturbation(unittest.TestCase):
+class PerturbationBase(unittest.TestCase):
+    """Helpers for rendering through the C harness; no tests of its own."""
+
     def pixels(self, seed, count):
         rng = random.Random(seed)
         return [(rng.randrange(WIDTH), rng.randrange(HEIGHT)) for _ in range(count)]
@@ -185,7 +212,15 @@ class Perturbation(unittest.TestCase):
             self.skipTest('gcc not available')
         out = subprocess.run([CLI, mode, path, str(maxiter)], input=''.join('%d %d\n' % p for p in pix),
                              capture_output=True, text=True, check=True).stdout.split('\n')
-        return [tuple(int(v) for v in line.split()) for line in out if line]
+        return [(int(f[0]), int(f[1])) for f in (line.split() for line in out if line)]
+
+    def run_cli_nu(self, mode, path, pix, maxiter=MAXITER):
+        """Like run_cli but returns (count, steps, smooth iteration count) per pixel."""
+        if CLI is None:
+            self.skipTest('gcc not available')
+        out = subprocess.run([CLI, mode, path, str(maxiter)], input=''.join('%d %d\n' % p for p in pix),
+                             capture_output=True, text=True, check=True).stdout.split('\n')
+        return [(int(f[0]), int(f[1]), float(f[2])) for f in (line.split() for line in out if line)]
 
     def exact(self, x, y, w, pix, maxiter=MAXITER):
         return [exact_count(x, y, w, px, py, maxiter) for px, py in pix]
@@ -202,6 +237,8 @@ class Perturbation(unittest.TestCase):
         self.assertGreaterEqual(match, min_match, '%s w=%s: %.0f%% exact' % (mode, w, match * 100))
         return got, want, ref
 
+
+class Perturbation(PerturbationBase):
     # -- Python mirror ---------------------------------------------------------
 
     def compare_mirror(self, w, center, npix=100):
@@ -346,6 +383,163 @@ class Perturbation(unittest.TestCase):
                     self.assertLessEqual(cnt + span, limit, '%s: skip of %d at count %d crosses limit %d' % (w, span, cnt, limit))
                     skips += span > 1
             self.assertGreater(skips, 100, '%s: the test never exercised a real skip' % w)
+
+
+def nucleus(guess, period, bits=5000, digits=1500):
+    """Centre of the period-`period` minibrot near `guess`, by Newton's method at high precision."""
+    from gmpy2 import mpc, mpfr
+    with gmpy2.context(precision=bits):
+        c = mpc(mpfr(str(guess[0])), mpfr(str(guess[1])))
+        for _ in range(60):
+            z, dz = mpc(0), mpc(0)
+            for _ in range(period):
+                dz = 2 * z * dz + 1
+                z = z * z + c
+            c = c - z / dz
+        return Decimal(mpfr(c.real).__format__('.%df' % digits)), Decimal(mpfr(c.imag).__format__('.%df' % digits))
+
+
+class FloatexpFast(unittest.TestCase):
+    """The fast floatexp loop (plain double arithmetic with a separate exponent) must agree with
+    the original slow loop, kept in tests/fx_reference.h, which renormalises every operation."""
+
+    @classmethod
+    def setUpClass(cls):
+        if CLI is None:
+            raise unittest.SkipTest('gcc not available')
+        with localcontext() as ctx:
+            ctx.prec = 1700
+            cls.nucleus = nucleus((Decimal('-0.7436423016578859'), Decimal('0.1318265198125947')), 39)
+
+    def counts(self, mode, path, pix, maxiter):
+        out = subprocess.run([CLI, mode, path, str(maxiter)], input=''.join('%d %d\n' % p for p in pix),
+                             capture_output=True, text=True, check=True).stdout.split('\n')
+        return [int(line.split()[0]) for line in out if line]
+
+    def make_ref(self, w, center, maxiter):
+        w = Decimal(w)
+        with localcontext() as ctx:
+            ctx.prec = max(60, deepzoom.digits_for(w) + 20)
+            x, y = view_for_center(center[0], center[1], w)
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp)
+        path = os.path.join(tmp, 'r.ref')
+        deepzoom.write_reference(path, x, y, w, maxiter)
+        return path
+
+    def compare(self, w, center, span=None, npix=100, maxiter=3000, min_distinct=1):
+        path = self.make_ref(w, center, maxiter)
+        rng = random.Random(zlib.crc32(('fx%s%s' % (w, center[0])).encode()))
+        if span is None:
+            pix = [(rng.randrange(WIDTH), rng.randrange(HEIGHT)) for _ in range(npix)]
+        else:   # pixels far outside the image: the reference is then a poor match
+            pix = [(rng.randrange(-span, span), rng.randrange(-span, span)) for _ in range(npix)]
+        want = self.counts('fxref', path, pix, maxiter)
+        got = self.counts('fx', path, pix, maxiter)
+        self.assertGreaterEqual(len(set(want)), min_distinct, 'sample too uniform to be meaningful')
+        bad = sum(a != b for a, b in zip(want, got))
+        self.assertLessEqual(bad, npix // 100, '%s w=%s: %d of %d pixels differ from the reference loop' % (center[0], w, bad, npix))
+
+    def test_spiral_at_every_depth(self):
+        for w in ('1e-8', '1e-30', '1e-150', '1e-400', '1e-1000'):
+            self.compare(w, SPIRAL, min_distinct=5)
+
+    def test_minibrot_with_long_reference(self):
+        for w in ('1e-3', '1e-5'):
+            self.compare(w, MINIBROT, min_distinct=20)
+
+    def test_view_centred_exactly_on_a_nucleus(self):
+        # the reference orbit passes through (almost) exactly zero every 39 iterations
+        for w in ('1e-3', '1e-5', '1e-30', '1e-400'):
+            self.compare(w, self.nucleus, min_distinct=20 if w in ('1e-3', '1e-5') else 1)
+
+    def test_reference_that_escapes_early(self):
+        self.compare('0.5', EARLY_ESCAPE, min_distinct=5)
+
+    def test_pixels_far_from_the_reference(self):
+        self.compare('1e-30', SPIRAL, span=400000, min_distinct=5)
+        self.compare('1e-30', self.nucleus, span=400000)
+
+    def test_is_much_faster_than_the_reference_loop(self):
+        import time
+        path = self.make_ref('1e-400', SPIRAL, 3000)
+        rng = random.Random(3)
+        pix = [(rng.randrange(WIDTH), rng.randrange(HEIGHT)) for _ in range(3000)]
+        timings = {}
+        for mode in ('fxref', 'fx'):
+            start = time.perf_counter()
+            self.counts(mode, path, pix, 3000)
+            timings[mode] = time.perf_counter() - start
+        self.assertLess(timings['fx'] * 4, timings['fxref'], 'fast %.3fs vs reference %.3fs' % (timings['fx'], timings['fxref']))
+
+
+class SmoothIterationCount(PerturbationBase):
+    """The smooth iteration count nu: exact where the loops are exact, and continuous across the
+    band edges where the integer count jumps."""
+
+    def check_nu(self, w, center, mode, tol, npix=60, maxiter=MAXITER):
+        w = Decimal(w)
+        x, y, path, ref = self.make_ref(w, center, maxiter)
+        pix = self.pixels(11, npix)
+        got = self.run_cli_nu(mode, path, pix, maxiter)
+        worst = 0.0
+        escaped = 0
+        for (px, py), (cnt, _, nu) in zip(pix, got):
+            idx, want = exact_nu(x, y, w, px, py, maxiter)
+            if idx >= maxiter:
+                self.assertEqual((cnt, nu), (maxiter, -1.0), 'interior pixel must report -1')
+                continue
+            escaped += 1
+            self.assertEqual(cnt, idx)
+            worst = max(worst, abs(nu - want))
+        self.assertGreater(escaped, npix // 3, 'sample has too few escaping pixels')
+        self.assertLess(worst, tol, '%s %s: worst |nu - exact| = %g' % (mode, w, worst))
+
+    def test_double_perturbation_nu_matches_exact(self):
+        self.check_nu('1e-5', SPIRAL, 'dbl', 1e-6)
+        self.check_nu('1e-30', SPIRAL, 'dbl', 1e-6)
+        self.check_nu('1e-4', MINIBROT, 'dbl', 1e-4)   # long chaotic orbits: ~2e-6 from exact
+
+    def test_floatexp_nu_matches_exact(self):
+        self.check_nu('1e-30', SPIRAL, 'fx', 1e-6)
+        self.check_nu('1e-400', SPIRAL, 'fx', 1e-6)
+
+    def test_bla_nu_matches_exact(self):
+        self.check_nu('1e-100', SPIRAL, 'bla', 1e-4, maxiter=6000)
+
+    def test_nu_is_continuous_across_a_band_edge(self):
+        # find, in plain doubles, a point where the integer count jumps by one along a line
+        def idx(cx, cy):
+            z, c = 0j, complex(cx, cy)
+            for i in range(300):
+                z = z * z + c
+                if z.real * z.real + z.imag * z.imag > BAILOUT2:
+                    return i
+            return 300
+        cy = 0.8
+        xs = [-0.6 + i * 1e-3 for i in range(900)]
+        edge = next((a, b) for a, b in zip(xs, xs[1:]) if idx(a, cy) >= 6 and idx(b, cy) == idx(a, cy) + 1 or idx(b, cy) >= 6 and idx(a, cy) == idx(b, cy) + 1)
+        lo, hi = edge
+        for _ in range(60):
+            mid = (lo + hi) / 2
+            if idx(mid, cy) == idx(lo, cy):
+                lo = mid
+            else:
+                hi = mid
+        k = min(idx(edge[0], cy), idx(edge[1], cy))
+        w = Decimal('1e-12')
+        centre = (Decimal(lo), Decimal(cy))      # a double is an exact Decimal
+        x, y, path, ref = self.make_ref(w, centre, 300)
+        row = [(px, HEIGHT // 2) for px in range(WIDTH)]
+        got = self.run_cli_nu('dbl', path, row, 300)
+        counts = {c for c, _, _ in got}
+        self.assertEqual(counts, {k, k + 1}, 'the view must straddle the band edge (counts %s)' % sorted(counts))
+        jumps = [(a, b) for a, b in zip(got, got[1:]) if a[0] != b[0]]
+        self.assertTrue(jumps)
+        for a, b in jumps:
+            self.assertEqual(abs(a[0] - b[0]), 1)
+            self.assertLess(abs(a[2] - b[2]), 1e-3, 'nu jumps from %.6f to %.6f across the edge' % (a[2], b[2]))
+
 
 
 if __name__ == '__main__':

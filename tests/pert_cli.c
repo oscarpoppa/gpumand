@@ -4,8 +4,9 @@
  *
  *   pert_cli <mode> <reffile> <iterations> < pixels
  *
- * mode: dbl (double perturbation), bla (double + BLA table), fx (floatexp)
- * stdin: one "px py" pixel per line. stdout: "count steps" per pixel.
+ * mode: dbl (double perturbation), bla (double + BLA table), fx (floatexp),
+ *       fxref (the original slow floatexp loop, kept as a golden reference)
+ * stdin: one "px py" pixel per line. stdout: "count steps nu" per pixel.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -14,6 +15,7 @@
 static int g_trace;
 #define PERT_TRACE(n, len, cnt) do { if (g_trace) fprintf(stderr, "%d %d %d\n", n, len, cnt); } while (0)
 #include "../bla.h"
+#include "fx_reference.h"
 #include "../aspect.h"
 
 typedef struct {
@@ -104,12 +106,15 @@ int main(int argc, char **argv) {
         if (g_trace)
             fprintf(stderr, "pixel %d %d\n", px, py);
         uint32_t steps = 0;
+        double nu = -1.0;
         int cnt;
         if (!strcmp(mode, "fx"))
-            cnt = pert_pixel_fx(ref, refn, px - WIDTH / 2, py - HEIGHT / 2, h.step_mant, h.step_exp, iterations, &steps);
+            cnt = pert_pixel_fx(ref, refn, px - WIDTH / 2, py - HEIGHT / 2, h.step_mant, h.step_exp, iterations, &steps, &nu);
+        else if (!strcmp(mode, "fxref"))
+            cnt = pert_pixel_fx_ref(ref, refn, px - WIDTH / 2, py - HEIGHT / 2, h.step_mant, h.step_exp, iterations, &steps, &nu);
         else
-            cnt = pert_pixel_dbl(ref, refn, bv, px - WIDTH / 2, py - HEIGHT / 2, step, iterations, &steps);
-        printf("%d %u\n", cnt, steps);
+            cnt = pert_pixel_dbl(ref, refn, bv, px - WIDTH / 2, py - HEIGHT / 2, step, iterations, &steps, &nu);
+        printf("%d %u %.17g\n", cnt, steps, nu);
     }
     free(mem);
     free(ref);

@@ -5,3 +5,6 @@ mand
 __pycache__/
 *.ref
 !pix/whole.bmp
+mand-cpu
+colorize
+*.nu

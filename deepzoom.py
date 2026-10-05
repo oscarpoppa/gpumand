@@ -14,7 +14,8 @@ Reference file format (little-endian): a 16-byte header {uint32 count, int32 ste
 float64 step_mant}, then count pairs of float64 (re, im) for Z_0 .. Z_{count-1}, where
 Z_0 = 0 and Z_{n+1} = Z_n^2 + C. The pixel spacing is step_mant * 2**step_exp (kept
 split so it survives widths below double's ~1e-308 range). The orbit stops after the
-first Z with |Z| > 2 (or after maxiter steps).
+first Z with |Z|^2 > BAILOUT2 (the renderers' escape radius, so pixels that stay close to
+the reference escape in step with it), or after maxiter steps.
 """
 import math
 import os
@@ -40,6 +41,7 @@ def read_define(header, name):
 
 
 ITERATIONS = read_define('iter.h', 'ITERATIONS')
+BAILOUT2 = read_define('iter.h', 'BAILOUT2')
 WIDTH = read_define('aspect.h', 'WIDTH')
 HEIGHT = read_define('aspect.h', 'HEIGHT')
 
@@ -83,7 +85,7 @@ def reference_orbit(x, y, w, maxiter):
             fr, fi = float(zr), float(zi)
             out.append(fr)
             out.append(fi)
-            if fr * fr + fi * fi > 4.0:
+            if fr * fr + fi * fi > BAILOUT2:
                 break
     return out
 
