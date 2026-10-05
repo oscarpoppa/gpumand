@@ -46,6 +46,7 @@ __global__ void MandKern(const uint32_t* dev_col_ptr, uint32_t* dev_pix_ptr, con
     const int iterations = ITERATIONS * dev_init_ptr->ilev;
     const int pix_x = blockIdx.x * blockDim.x + threadIdx.x;
     const int pix_y = blockIdx.y * blockDim.y + threadIdx.y;
+    // pixels are square: both axes advance by ledg/WIDTH (the view height is ledg*HEIGHT/WIDTH)
     const double cx = dev_init_ptr->llft.x + dev_init_ptr->ledg * (double)pix_x / WIDTH;
     const double cy = dev_init_ptr->llft.y + dev_init_ptr->ledg * (double)pix_y / WIDTH;
     double zx = 0.0, zy = 0.0;
@@ -159,7 +160,7 @@ int main(int argc, char **argv) {
     CUDA_CHECK(cudaGetLastError());
     uint32_t *pixarr = (uint32_t*)malloc(HEIGHT*WIDTH*sizeof(uint32_t));
     CUDA_CHECK(cudaMemcpy(pixarr, dev_pix_ptr, HEIGHT*WIDTH*sizeof(uint32_t), cudaMemcpyDeviceToHost));
-    gen_bmp(init->filename, pixarr, WIDTH, HEIGHT);
+    const int write_failed = gen_bmp(init->filename, pixarr, WIDTH, HEIGHT);
     cudaFree(dev_bla_ptr);
     cudaFree(dev_ref_ptr);
     cudaFree(dev_init_ptr);
@@ -171,5 +172,5 @@ int main(int argc, char **argv) {
     free(colors->pall);
     free(colors);
     free(init);
-    return 0;
+    return write_failed ? 1 : 0;
 }

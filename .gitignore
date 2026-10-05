@@ -4,3 +4,4 @@
 mand
 __pycache__/
 *.ref
+!pix/whole.bmp

@@ -21,7 +21,7 @@ Install:
     
     $ cd gpumand
     
-    $ make
+    $ make            # pass ARCH=sm_XX for your GPU, e.g. make ARCH=sm_86 (default sm_50)
 
     > Update mand-gui.ini, or supply your own (with --ini option) to reflect your install
 

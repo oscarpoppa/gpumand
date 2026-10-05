@@ -1,7 +1,15 @@
 #ifndef __BMP_H
+#define __BMP_H
 #include <stdint.h>
+
+#ifdef __cplusplus
 extern "C" {
-void gen_bmp(const char *, uint32_t *, const uint32_t, const uint32_t);
-};
-#define ___BMP_H
+#endif
+
+/* Writes a width x height 32-bit BMP. Returns 0 on success, -1 on any I/O error. */
+int gen_bmp(const char *, const uint32_t *, const uint32_t, const uint32_t);
+
+#ifdef __cplusplus
+}
+#endif
 #endif

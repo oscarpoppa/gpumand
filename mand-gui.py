@@ -1,7 +1,9 @@
-#!/usr/bin/env python
-from PyQt5.QtCore import *
-from PyQt5.QtGui import *
-from PyQt5.QtWidgets import *
+#!/usr/bin/env python3
+import os
+from PyQt5.QtCore import QPoint, QRect, QSize, Qt, pyqtSlot
+from PyQt5.QtGui import QIcon, QPixmap
+from PyQt5.QtWidgets import (QApplication, QComboBox, QFileDialog, QHBoxLayout, QLabel, QLineEdit, QMessageBox,
+                             QPushButton, QRubberBand, QScrollArea, QVBoxLayout, QWidget)
 from sys import argv, exit, stderr
 from subprocess import call
 from shutil import copyfile
@@ -10,7 +12,6 @@ from math import ceil
 from configparser import ConfigParser
 from optparse import OptionParser
 from decimal import Decimal
-from os import remove
 from deepzoom import ITERATIONS, WIDTH, HEIGHT, PERTURB_BELOW, selection_to_region, write_reference
 
 
@@ -28,8 +29,11 @@ except Exception:
     exit(1)
 
 TITLE = 'Mandelbrot Set Viewer'
-STARTFILE = '{}/pix/whole.bmp'.format(paths['bin_dir'])
-NAMEPATT = '{}/pix/mandapp%s.bmp'.format(paths['bin_dir'])
+# bin_dir is where `mand` and pix/ live; it defaults to this script's directory
+BIN_DIR = paths.get('bin_dir', os.path.dirname(os.path.abspath(__file__)))
+SAVE_DIR = paths.get('save_dir', os.path.expanduser('~'))
+PIX_DIR = os.path.join(BIN_DIR, 'pix')
+STARTFILE = os.path.join(PIX_DIR, 'whole.bmp')
 RESET_COORDS = (Decimal('-2.0'), Decimal('-1.333333'), Decimal('4.0'), 0)
 # Iteration multipliers offered (limit = ITERATIONS * multiplier). Deep views need many more
 # iterations than shallow ones; the large values are only practical with the BLA speedup.
@@ -55,6 +59,10 @@ class LogXYW(object):
 
 LOG_RESET = LogXYW(*RESET_COORDS)
 XYWD_RESET = XYWD(*RESET_COORDS)
+
+
+def render_name(n):
+    return os.path.join(PIX_DIR, 'mandapp{}.bmp'.format(n))
 
 
 def get_tnail(fname):
@@ -94,14 +102,14 @@ class MTree(object):
         return self._current
 
     def rem(self, pg):
-        if pg.parent and self._map.has_key(pg.fname):
+        if pg.parent and pg.fname in self._map:
             self._current = self._map[pg.parent]
             del(self._map[pg.fname])
         return self._current
 
     @property
     def fname(self):
-        return NAMEPATT % self._count
+        return render_name(self._count)
 
     @property
     def back(self):
@@ -128,6 +136,8 @@ class PicRegion(QLabel):
         self.rubberBand = QRubberBand(QRubberBand.Rectangle, self)
         self.origin = QPoint()
         self.cand_xyw = LogXYW(*RESET_COORDS)
+        # the pixmap must start at the label's top-left so mouse positions map straight to image pixels
+        self.setAlignment(Qt.AlignLeft | Qt.AlignTop)
     
     def mousePressEvent(self, event):
         self.rubberBand.hide()
@@ -145,7 +155,7 @@ class PicRegion(QLabel):
     
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.LeftButton:
-            geom = self.rubberBand.geometry();
+            geom = self.rubberBand.geometry()
             pixx = geom.bottomLeft().x()
             pixy = PIX_HGT - geom.bottomLeft().y()
             pixw = geom.width() 
@@ -193,7 +203,7 @@ def on_run():
         yval = ybox.text()
         wval = wbox.text()
         ival = inter.currentText()
-        cmd = ['{}/mand'.format(paths['bin_dir']), xval, yval, wval, MAP.fname, ival]
+        cmd = [os.path.join(BIN_DIR, 'mand'), xval, yval, wval, MAP.fname, ival]
         refname = None
         if Decimal(wval) < PERTURB_BELOW:
             # Too deep for plain double: render by perturbation off an arbitrary-precision reference orbit.
@@ -204,7 +214,7 @@ def on_run():
             status = call(cmd)
         finally:
             if refname:
-                remove(refname)
+                os.remove(refname)
         if status != 0:
             stderr.write('mand failed with status {}\n'.format(status))
             return
@@ -215,19 +225,21 @@ def on_run():
 
 @pyqtSlot()
 def on_save():
-        start = paths['save_dir']
-        dlg = QFileDialog(window, 'Save File', start, 'Images (*.bmp)')
-        dlg.setFileMode(QFileDialog.AnyFile)
-        if dlg.exec_():
-            with WaitCurs():
-                filenames = dlg.selectedFiles()
-                fname = str(filenames[0])
-                if not fname.endswith('.bmp'):
-                    fname = '%s.bmp' % fname
-                try:
-                    copyfile(MAP.curr.fname, fname)
-                except Exception as e:
-                    print(str(e))
+    dlg = QFileDialog(window, 'Save File', SAVE_DIR, 'Images (*.bmp)')
+    dlg.setFileMode(QFileDialog.AnyFile)
+    if not dlg.exec_():
+        return
+    error = None
+    with WaitCurs():
+        target = str(dlg.selectedFiles()[0])
+        if not target.endswith('.bmp'):
+            target = '%s.bmp' % target
+        try:
+            copyfile(MAP.curr.fname, target)
+        except OSError as e:
+            error = '{}: {}'.format(target, e)
+    if error:
+        QMessageBox.warning(window, 'Save failed', error)
 
 
 def on_tnclick(logxyw):
