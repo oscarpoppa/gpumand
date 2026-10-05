@@ -54,8 +54,6 @@ the programs are and where saved pictures go by default:
 
 The GUI starts either way, but it can only draw with a renderer that has been built, so set this before your first Run.
 
-(The GPU renderer used to be called `mand`. An older ini file that says `renderer=mand` still works: it is read as `mand-gpu`. Build it with `make gpu`, which now produces `mand-gpu`.)
-
 Run it:
 
     $ ./mand-gui.py [-i,--ini=your.ini]
