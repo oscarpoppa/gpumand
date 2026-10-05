@@ -306,14 +306,24 @@ def drive():
               make_expected(nu_file, '--palette=twilight', '--mapping=histogram'))
         mtime, entries, icons = os.path.getmtime(nu_file), len(list(MAP)), icon_pixels(item)
 
+        pix = os.path.join(tmp, 'pix')
+        files_before = sorted(os.listdir(pix))
         pal.setCurrentText('fire')
         shown_file = g['image_path'](item)
-        check('choosing a palette recolors the view on screen', shown_file != item.fname and os.path.exists(shown_file), shown_file)
+        check('choosing a palette replaces the view\'s own image file', shown_file == item.fname and os.path.exists(shown_file), shown_file)
+        check('recoloring leaves no extra files', sorted(os.listdir(pix)) == files_before, set(os.listdir(pix)) ^ set(files_before))
         check('the recolored image is exactly what colorize makes from the saved counts',
               open(shown_file, 'rb').read() == make_expected(nu_file, '--palette=fire', '--mapping=histogram'))
         check('recoloring did not render again', os.path.getmtime(nu_file) == mtime and len(list(MAP)) == entries)
         check('the thumbnail was recolored too', icon_pixels(item) != icons)
         check('the label shows the recolored image', g['reg'].source.toImage() == QtGui.QImage(shown_file))
+        for name, value in (('pal', 'ocean'), ('pal', 'ice'), ('pal', 'fire'), ('pal', 'ocean')):     # many quick changes
+            pal.setCurrentText(value)
+            check('recoloring to %s shows the new image at once' % value,
+                  g['reg'].source.toImage() == QtGui.QImage(item.fname) and
+                  open(item.fname, 'rb').read() == make_expected(nu_file, '--palette=%s' % value, '--mapping=histogram'))
+        check('a dozen recolorings still leave no extra files', sorted(os.listdir(pix)) == files_before, set(os.listdir(pix)) ^ set(files_before))
+        pal.setCurrentText('fire')
 
         mapping.setCurrentText('linear')
         scale.setValue(40.0)

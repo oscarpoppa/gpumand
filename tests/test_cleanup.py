@@ -8,7 +8,7 @@ import unittest
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 import cleanup
 
-GENERATED = ['mandapp0.bmp', 'mandapp12.bmp', 'mandapp12.bmp.nu', 'mandapp3.c7.bmp', 'mandapp3.c120.bmp',
+GENERATED = ['mandapp0.bmp', 'mandapp4.bmp.new', 'whole-start.bmp.new', 'mandapp12.bmp', 'mandapp12.bmp.nu', 'mandapp3.c7.bmp', 'mandapp3.c120.bmp',
              'whole-start.bmp', 'whole.bmp.nu', 'whole.c1.bmp', 'whole.c33.bmp']
 KEPT = ['whole.bmp', 'mine.bmp', 'mandapp.bmp', 'mandappX.bmp', 'mandapp1.bmp.bak', 'mandapp1.bmp.nu.old', 'mandapp1.cX.bmp',
         'xmandapp1.bmp', 'mandapp1.bmp~', 'notes.txt', 'mand-gui.ini', 'whole.bmp.nu.keep', 'whole-start.bmp.1']

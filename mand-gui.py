@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import os
 from PyQt5.QtCore import QPoint, QRect, QSize, Qt, pyqtSlot
-from PyQt5.QtGui import QIcon, QKeySequence, QPixmap
+from PyQt5.QtGui import QIcon, QImage, QKeySequence, QPixmap
 from PyQt5.QtWidgets import (QApplication, QComboBox, QDial, QDoubleSpinBox, QFileDialog, QFormLayout, QGroupBox, QHBoxLayout,
                              QLabel, QLineEdit, QMessageBox, QPushButton, QRubberBand, QScrollArea, QShortcut, QSizePolicy, QVBoxLayout, QWidget)
 from sys import argv, exit, stderr
@@ -95,10 +95,16 @@ def render_name(n):
     return os.path.join(PIX_DIR, 'mandapp{}.bmp'.format(n))
 
 
-# Each view is identified by the file name its render was written to; recoloring writes a new file
-# (Qt caches pixmaps by path), and SHOWN says which file is currently displayed for a view.
+# Each view is identified by the file name its render was written to. Recoloring replaces that file in
+# place, so no extra files pile up; SHOWN says which file is displayed for a view. The opening view is
+# the exception: its shipped image (whole.bmp) is never overwritten, a copy (whole-start.bmp) is shown.
 SHOWN = {}
-RECOLORS = [0]
+START_COPY = os.path.join(PIX_DIR, 'whole-start.bmp')
+
+
+def load_pixmap(path):
+    """Read an image fresh from disk (QPixmap(path) may hand back a cached copy of a file we just replaced)."""
+    return QPixmap.fromImage(QImage(path))
 
 
 def nu_name(fname):
@@ -131,19 +137,22 @@ def color_options():
 
 
 def recolor(item):
-    """Redraw a view with the current color settings from its saved counts. True if it was recolored."""
+    """Redraw a view with the current color settings from its saved counts, replacing its image file.
+    True if it was recolored."""
     nu = nu_name(item.fname)
     if not (os.path.exists(nu) and os.access(COLORIZE, os.X_OK)):
         return False
-    RECOLORS[0] += 1
-    out = '{}.c{}.bmp'.format(item.fname[:-4], RECOLORS[0])
-    res = run_process([COLORIZE, nu, out] + color_options(), capture_output=True, text=True)
-    if res.returncode != 0 or not os.path.exists(out):
+    out = START_COPY if item.fname == STARTFILE else item.fname
+    new = out + '.new'      # written beside it and moved into place, so a failure leaves the old image intact
+    res = run_process([COLORIZE, nu, new] + color_options(), capture_output=True, text=True)
+    if res.returncode != 0 or not os.path.exists(new):
+        if os.path.exists(new):
+            os.remove(new)
         QMessageBox.warning(window, 'Recolor failed', (res.stderr or 'colorize failed').strip())
         return False
+    os.replace(new, out)
     SHOWN[item.fname] = out
-    pixmap = QPixmap(out)
-    item.icon.setIcon(QIcon(pixmap))
+    item.icon.setIcon(QIcon(load_pixmap(out)))
     return True
 
 
@@ -151,7 +160,7 @@ def on_color_change(*_):
     """A color control changed: recolor the view on screen at once (new renders use the settings too)."""
     with WaitCurs():
         if recolor(MAP.curr):
-            reg.setPixmap(QPixmap(image_path(MAP.curr)))
+            reg.setPixmap(load_pixmap(image_path(MAP.curr)))
 
 
 def ask_cleanup(parent, count, size, reset=False):
@@ -209,7 +218,7 @@ def ensure_start_image():
     """Draw the opening view with the current palette, if the renderer is there to produce its counts."""
     nu = nu_name(STARTFILE)
     if not os.path.exists(nu):
-        start = os.path.join(PIX_DIR, 'whole-start.bmp')
+        start = START_COPY
         x, y, w, d = RESET_COORDS
         try:
             call([os.path.join(BIN_DIR, RENDERER), str(x), str(y), str(w), start, '1', '--nu-out=' + nu] + color_options())
@@ -418,7 +427,7 @@ def fset(item):
     reg.cand_xyw.w = item.xywd.w
     reg.cand_xyw.d = int(item.xywd.d)
     inter.setCurrentIndex(int(item.xywd.d))
-    reg.setPixmap(QPixmap(image_path(item)))
+    reg.setPixmap(load_pixmap(image_path(item)))
     for mem in MAP:
         mem.icon.setFlat(True)
     item.icon.setFlat(False)

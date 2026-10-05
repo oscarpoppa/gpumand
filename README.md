@@ -23,7 +23,8 @@ inside can take hours (the window stays busy until the render finishes).
 
 Keyboard: Enter (or the keypad's Enter) presses Run.
 
-Cleaning up: every render leaves files in `pix/` (`mandappN.bmp`, its `.nu` counts, recolored `.cN.bmp` copies, and the opening view's files).
+Cleaning up: every render leaves files in `pix/` (`mandappN.bmp`, its `.nu` counts, and the opening view's files). Changing anything in the Colors box
+replaces the view's image in place, so recoloring never adds files (older versions left a `.cN.bmp` copy per change; cleanup still removes those).
 When you quit with any of them present, the program shows how many there are and how much space they take, and asks whether to keep them or
 delete them all (Cancel stays open). Reset asks the same about the views it is about to throw away (not the opening view's own files); Cancel
 there means don't reset. Deleting only removes files the program itself made, by exact name, in `pix/`; copies you saved with Save,

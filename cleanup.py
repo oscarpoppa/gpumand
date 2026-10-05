@@ -8,10 +8,10 @@ import re
 import time
 
 # mandapp3.bmp (a render), mandapp3.bmp.nu (its raw counts), mandapp3.c12.bmp (a recolored copy)
-RENDERS = re.compile(r'^(mandapp\d+\.bmp(\.nu)?|mandapp\d+\.c\d+\.bmp)$')
+RENDERS = re.compile(r'^(mandapp\d+\.bmp(\.nu|\.new)?|mandapp\d+\.c\d+\.bmp)$')   # (.cN.bmp: older versions made one per recoloring)
 # whole-start.bmp / whole.bmp.nu / whole.c1.bmp: the opening view, which is drawn on demand and is needed
 # again straight away after a Reset
-OPENING = re.compile(r'^(whole-start\.bmp|whole\.bmp\.nu|whole\.c\d+\.bmp)$')
+OPENING = re.compile(r'^(whole-start\.bmp(\.new)?|whole\.bmp\.nu|whole\.c\d+\.bmp)$')
 # reference orbits are removed right after each render; one still here was left by a crash
 REFERENCE = re.compile(r'^mandapp\d+\.bmp\.ref$')
 STALE_SECONDS = 3600
