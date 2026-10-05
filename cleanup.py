@@ -10,7 +10,7 @@ import shutil
 import time
 
 # mandapp3.bmp (a render), mandapp3.bmp.nu (its raw counts), mandapp3.c12.bmp (a recolored copy)
-RENDERS = re.compile(r'^(mandapp\d+\.bmp(\.nu|\.new)?|mandapp\d+\.c\d+\.bmp)$')   # (.cN.bmp: older versions made one per recoloring)
+RENDERS = re.compile(r'^(mandapp\d+\.bmp(\.nu|\.new|\.nu\.new)?|mandapp\d+\.c\d+\.bmp)$')   # (.cN.bmp: older versions made one per recoloring)
 # whole-start.bmp / whole.bmp.nu / whole.c1.bmp: the opening view, which is drawn on demand and is needed
 # again straight away after a Reset
 OPENING = re.compile(r'^(whole-start\.bmp(\.new)?|whole\.bmp\.nu|whole\.c\d+\.bmp)$')
@@ -33,6 +33,17 @@ def generated_files(directory, opening=True):
     opening view's files (what a Reset needs to keep)."""
     return (_matching(directory, RENDERS) + (_matching(directory, OPENING) if opening else []) +
             _matching(directory, REFERENCE))
+
+
+def view_files(directory, fname):
+    """Every file the program made for the single view whose picture is `fname` (mandapp7.bmp): the picture, its
+    raw counts, recolored copies from older versions, and any temporary or reference-orbit leftovers.
+    Exact names only, so mandapp7 never matches mandapp70."""
+    match = re.match(r'^mandapp(\d+)\.bmp$', os.path.basename(fname))
+    if not match:
+        return []
+    own = re.compile(r'^mandapp{}\.(bmp(\.nu|\.new|\.nu\.new|\.ref|\.new\.ref)?|c\d+\.bmp)$'.format(match.group(1)))
+    return _matching(directory, own)
 
 
 def total_size(paths):

@@ -697,6 +697,88 @@ def drive():
         refused(bad, label)
     g['QFileDialog'] = real_dialog
 
+    # -- the tiny x on the selected thumbnail deletes a view and its files; Back skips deleted views
+    from cleanup import view_files
+    g['on_reset']()
+    chain = []
+    for _ in range(3):                                  # opening view -> A -> B -> C, each zoomed from the one before
+        release(g, 300, 500, 600)
+        g['on_run']()
+        chain.append(MAP.curr)
+    A, B, C = chain
+    n_of = lambda item: os.path.basename(item.fname)[len('mandapp'):-len('.bmp')]
+    guards = [os.path.join(pix, 'mandapp%sx.bmp' % n_of(B)), os.path.join(pix, 'mandapp%s.png' % n_of(B)),
+              os.path.join(pix, 'mandapp%s0.bmp' % n_of(B)), os.path.join(pix, 'mandapp%s0.bmp.nu' % n_of(B))]
+    for f in guards:
+        open(f, 'wb').write(b'not this view')
+    open(B.fname + '.ref', 'wb').write(b'leftover')       # a stray temporary file of that view
+    open(os.path.join(pix, 'mandapp%s.c4.bmp' % n_of(B)), 'wb').write(b'older recolor')
+    B.icon.click()
+    check('the x shows on the selected thumbnail only', B.icon.closer.isVisible() and not A.icon.closer.isVisible() and
+          not C.icon.closer.isVisible() and not g['INITPG'].icon.closer.isVisible())
+    check('the x is small and in the thumbnail\'s top-right corner', B.icon.closer.width() <= 20 and
+          B.icon.closer.x() > B.icon.width() - 40 and B.icon.closer.y() < 10, (B.icon.closer.geometry(), B.icon.size()))
+    b_files = view_files(pix, B.fname)
+    check('a view\'s files are found by exact name', len(b_files) >= 4 and not set(guards) & set(b_files),
+          sorted(os.path.basename(f) for f in b_files))
+    asked = []
+    g['confirm_delete'] = lambda parent, count, size: (asked.append((count, size)), False)[1]
+    thumbs_before = g['scr_layout'].count()
+    B.icon.closer.click()
+    check('Cancel keeps the view, its files and its thumbnail', MAP[B.fname] is not None and all(os.path.exists(f) for f in b_files) and
+          g['scr_layout'].count() == thumbs_before and asked and asked[-1][0] == len(b_files) and asked[-1][1] > 0, asked)
+    g['confirm_delete'] = lambda parent, count, size: True
+    other_files = view_files(pix, A.fname) + view_files(pix, C.fname)
+    B.icon.closer.click()
+    check('deleting removes the view from the history', MAP[B.fname] is None and len(list(MAP)) == 3,
+          [i.fname for i in MAP])
+    check('...and every file made for it', not any(os.path.exists(f) for f in b_files), [f for f in b_files if os.path.exists(f)])
+    check('...but no other view\'s files and nothing that only looks similar',
+          all(os.path.exists(f) for f in other_files + guards), [f for f in other_files + guards if not os.path.exists(f)])
+    check('...and its thumbnail', g['scr_layout'].count() == thumbs_before - 1 and B.icon.parent() is None)
+    check('the view before it is shown instead', MAP.curr.fname == A.fname and Decimal(exact(g, 'wbox')) == Decimal(A.xywd.w), MAP.curr.fname)
+    check('the x moved to the newly selected thumbnail', A.icon.closer.isVisible() and not C.icon.closer.isVisible())
+    check('the view that was zoomed from the deleted one now hangs from its parent', MAP[C.fname].parent == A.fname, MAP[C.fname].parent)
+    C.icon.click()
+    g['on_back']()
+    check('Back from C goes to A, the next real view back, not the deleted one', MAP.curr.fname == A.fname, MAP.curr.fname)
+    # delete A as well: C now hangs from the opening view
+    A.icon.click()
+    A.icon.closer.click()
+    check('deleting the next view works the same way', MAP[A.fname] is None and MAP.curr.fname == g['STARTFILE'] and MAP[C.fname].parent == g['STARTFILE'],
+          (MAP.curr.fname, MAP[C.fname].parent))
+    check('the opening view has no x', not g['INITPG'].icon.closer.isVisible())
+    C.icon.click()
+    g['on_back']()
+    check('Back from C now goes to the opening view', MAP.curr.fname == g['STARTFILE'], MAP.curr.fname)
+    before = len(list(MAP))
+    g['on_delete_view'](g['STARTFILE'])
+    check('the opening view cannot be deleted', len(list(MAP)) == before and os.path.exists(os.path.join(pix, 'whole.bmp')))
+    # a parent that has gone missing falls back to the opening view
+    MAP._map[C.fname] = MAP[C.fname]._replace(parent='no-such-view.bmp')
+    C.icon.click()
+    g['on_back']()
+    check('Back with a missing parent falls back to the opening view', MAP.curr.fname == g['STARTFILE'], MAP.curr.fname)
+    # a failed delete is reported
+    D = None
+    release(g, 300, 500, 600)
+    g['on_run']()
+    D = MAP.curr
+    d_files = view_files(pix, D.fname)
+    real_delete = g['delete_files']
+    g['delete_files'] = lambda paths: len(paths)         # pretend nothing could be removed
+    warned = len(dialogs)
+    D.icon.closer.click()
+    g['delete_files'] = real_delete
+    check('files that cannot be deleted are reported, and the view is still dropped', len(dialogs) == warned + 1 and MAP[D.fname] is None, dialogs[-1:])
+    for f in d_files:
+        os.remove(f)
+    for f in guards + [os.path.join(pix, 'mandapp%s.c4.bmp' % n_of(B))]:
+        if os.path.exists(f):
+            os.remove(f)
+    g['confirm_delete'] = lambda parent, count, size: True
+    g['on_reset']()
+
     # -- Reset offers to delete the files of the views it throws away (but keeps the opening view's)
     pix_dir = g['PIX_DIR']
     g['on_reset']()
