@@ -10,6 +10,7 @@ typedef struct cstruct {
 typedef struct {
     Complex lleft;
     char filename[256];
+    char refname[256];
     uint32_t interleave;
 } RunStart;
 

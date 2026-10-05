@@ -9,6 +9,9 @@ from collections import namedtuple
 from math import ceil
 from configparser import ConfigParser
 from optparse import OptionParser
+from decimal import Decimal
+from os import remove
+from deepzoom import ITERATIONS, WIDTH, HEIGHT, PERTURB_BELOW, selection_to_region, write_reference
 
 
 parser = OptionParser()
@@ -27,10 +30,12 @@ except Exception:
 TITLE = 'Mandelbrot Set Viewer'
 STARTFILE = '{}/pix/whole.bmp'.format(paths['bin_dir'])
 NAMEPATT = '{}/pix/mandapp%s.bmp'.format(paths['bin_dir'])
-RESET_COORDS = (-2.0, -1.333333, 4.0, 0)
-MAX_MULT = 30
-PIX_WID = 1200
-PIX_HGT = 800
+RESET_COORDS = (Decimal('-2.0'), Decimal('-1.333333'), Decimal('4.0'), 0)
+# Iteration multipliers offered (limit = ITERATIONS * multiplier). Deep views need many more
+# iterations than shallow ones; the large values are only practical with the BLA speedup.
+MULTIPLIERS = list(range(1, 31)) + [40, 50, 75, 100, 150, 200, 300, 500, 750, 1000]
+PIX_WID = WIDTH
+PIX_HGT = HEIGHT
 WIN_WID = 1460
 WIN_HGT = 950
 TN_WID = 160
@@ -122,7 +127,7 @@ class PicRegion(QLabel):
         QLabel.__init__(self, parent)
         self.rubberBand = QRubberBand(QRubberBand.Rectangle, self)
         self.origin = QPoint()
-        self.cand_xyw = LOG_RESET 
+        self.cand_xyw = LogXYW(*RESET_COORDS)
     
     def mousePressEvent(self, event):
         self.rubberBand.hide()
@@ -144,11 +149,10 @@ class PicRegion(QLabel):
             pixx = geom.bottomLeft().x()
             pixy = PIX_HGT - geom.bottomLeft().y()
             pixw = geom.width() 
-            log_height = (MAP.curr.xywd.w * PIX_HGT) / PIX_WID
             if pixw > 10: 
-                self.cand_xyw.x = MAP.curr.xywd.x + pixx * MAP.curr.xywd.w / PIX_WID
-                self.cand_xyw.y = MAP.curr.xywd.y + pixy * log_height / PIX_HGT
-                self.cand_xyw.w = MAP.curr.xywd.w * pixw / PIX_WID 
+                cur = MAP.curr.xywd
+                self.cand_xyw.x, self.cand_xyw.y, self.cand_xyw.w = selection_to_region(
+                    cur.x, cur.y, cur.w, pixx, pixy, pixw, PIX_WID, PIX_HGT)
                 self.cand_xyw.d = inter.currentIndex()
                 xbox.setText(str(self.cand_xyw.x))
                 ybox.setText(str(self.cand_xyw.y))
@@ -189,7 +193,21 @@ def on_run():
         yval = ybox.text()
         wval = wbox.text()
         ival = inter.currentText()
-        call(['{}/mand'.format(paths['bin_dir']), xval, yval, wval, MAP.fname, ival])
+        cmd = ['{}/mand'.format(paths['bin_dir']), xval, yval, wval, MAP.fname, ival]
+        refname = None
+        if Decimal(wval) < PERTURB_BELOW:
+            # Too deep for plain double: render by perturbation off an arbitrary-precision reference orbit.
+            refname = MAP.fname + '.ref'
+            write_reference(refname, xval, yval, wval, ITERATIONS * int(ival))
+            cmd.append(refname)
+        try:
+            status = call(cmd)
+        finally:
+            if refname:
+                remove(refname)
+        if status != 0:
+            stderr.write('mand failed with status {}\n'.format(status))
+            return
         added = MAP.add(XYWD(reg.cand_xyw.x, reg.cand_xyw.y, reg.cand_xyw.w, int(reg.cand_xyw.d)))
         scr_layout.insertWidget(0, MAP.curr.icon)
         fset(MAP.curr) 
@@ -247,7 +265,7 @@ if __name__ == '__main__':
     wbox = QLineEdit()
     wbox.setReadOnly(True) 
     inter = QComboBox()
-    inter.addItems([str(n) for n in range(1,MAX_MULT+1)])
+    inter.addItems([str(n) for n in MULTIPLIERS])
     vbox = QVBoxLayout()
     vbox.addWidget(reg)
     hbox = QHBoxLayout() 
