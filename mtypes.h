@@ -7,7 +7,7 @@ typedef struct cstruct {
     double length;
 } Complex;
 
-/* How smooth iteration counts become colours (see colorize.h). */
+/* How smooth iteration counts become colors (see colorize.h). */
 typedef struct {
     char palette[32];
     int mapping;        /* MAP_HISTOGRAM, MAP_LINEAR or MAP_LOG */

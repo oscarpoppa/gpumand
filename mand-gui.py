@@ -3,7 +3,7 @@ import os
 from PyQt5.QtCore import QPoint, QRect, QSize, Qt, pyqtSlot
 from PyQt5.QtGui import QIcon, QPixmap
 from PyQt5.QtWidgets import (QApplication, QComboBox, QDial, QDoubleSpinBox, QFileDialog, QFormLayout, QGroupBox, QHBoxLayout,
-                             QLabel, QLineEdit, QMessageBox, QPushButton, QRubberBand, QScrollArea, QVBoxLayout, QWidget)
+                             QLabel, QLineEdit, QMessageBox, QPushButton, QRubberBand, QScrollArea, QSizePolicy, QVBoxLayout, QWidget)
 from sys import argv, exit, stderr
 from subprocess import call, run as run_process     # `run` is the Run button below
 from shutil import copyfile
@@ -12,7 +12,7 @@ from math import ceil
 from configparser import ConfigParser
 from optparse import OptionParser
 from decimal import Decimal
-from deepzoom import ITERATIONS, WIDTH, HEIGHT, PERTURB_BELOW, selection_to_region, write_reference
+from deepzoom import abbreviate, ITERATIONS, WIDTH, HEIGHT, PERTURB_BELOW, selection_to_region, write_reference
 
 
 parser = OptionParser()
@@ -37,7 +37,7 @@ SAVE_DIR = paths.get('save_dir', os.path.expanduser('~'))
 RENDERER = paths.get('renderer', 'mand')
 PIX_DIR = os.path.join(BIN_DIR, 'pix')
 STARTFILE = os.path.join(PIX_DIR, 'whole.bmp')
-# colorize recolours a saved image (the renderer's smooth iteration counts) without rendering again
+# colorize recolors a saved image (the renderer's smooth iteration counts) without rendering again
 COLORIZE = os.path.join(BIN_DIR, 'colorize')
 FALLBACK_PALETTES = ['twilight', 'fire', 'ocean', 'aurora', 'ice', 'sunset', 'gray', 'rainbow', 'classic']
 MAPPINGS = ['histogram', 'linear', 'log']
@@ -51,6 +51,26 @@ WIN_WID = 1460
 WIN_HGT = 950
 TN_WID = 160
 TN_HGT = 120
+# the picture may be cropped by up to this fraction of its width or height to fill a window of another shape
+MAX_CROP = 0.15
+# width of the column of controls beside the picture
+SIDE_WID = 270
+# a dark gray control area; the image is the brightest thing on screen
+DARK_STYLE = """
+QWidget { background-color: #2d2d2d; color: #dcdcdc; }
+QGroupBox { border: 1px solid #555; border-radius: 4px; margin-top: 1.2ex; padding-top: 1ex; }
+QGroupBox::title { subcontrol-origin: margin; left: 8px; padding: 0 3px; }
+QLineEdit, QComboBox, QDoubleSpinBox { background-color: #3c3c3c; border: 1px solid #5a5a5a; border-radius: 3px; padding: 2px 4px; }
+QComboBox QAbstractItemView { background-color: #3c3c3c; selection-background-color: #5a6e8c; }
+QPushButton { background-color: #444; border: 1px solid #666; border-radius: 3px; padding: 3px 4px; }
+QPushButton:hover { background-color: #505050; }
+QPushButton:flat { background-color: transparent; border: 2px solid transparent; }
+QScrollArea { border: none; }
+QScrollBar:vertical { background: #2d2d2d; width: 12px; }
+QScrollBar::handle:vertical { background: #666; border-radius: 5px; min-height: 24px; }
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
+QToolTip { background-color: #3c3c3c; color: #dcdcdc; border: 1px solid #666; }
+"""
 
 XYWD = namedtuple('XYWD', ('x', 'y', 'w', 'd'))
 PGINFO = namedtuple('PGINFO', ('xywd', 'fname', 'icon', 'parent'))
@@ -72,7 +92,7 @@ def render_name(n):
     return os.path.join(PIX_DIR, 'mandapp{}.bmp'.format(n))
 
 
-# Each view is identified by the file name its render was written to; recolouring writes a new file
+# Each view is identified by the file name its render was written to; recoloring writes a new file
 # (Qt caches pixmaps by path), and SHOWN says which file is currently displayed for a view.
 SHOWN = {}
 RECOLORS = [0]
@@ -98,7 +118,7 @@ def palette_names():
 
 
 def color_options():
-    """The colour settings as command line options for the renderer and for colorize."""
+    """The color settings as command line options for the renderer and for colorize."""
     opts = ['--palette=' + pal_box.currentText(), '--mapping=' + map_box.currentText()]
     if scale_box.value() > 0:
         opts.append('--scale={:g}'.format(scale_box.value()))
@@ -108,7 +128,7 @@ def color_options():
 
 
 def recolor(item):
-    """Redraw a view with the current colour settings from its saved counts. True if it was recoloured."""
+    """Redraw a view with the current color settings from its saved counts. True if it was recolored."""
     nu = nu_name(item.fname)
     if not (os.path.exists(nu) and os.access(COLORIZE, os.X_OK)):
         return False
@@ -116,7 +136,7 @@ def recolor(item):
     out = '{}.c{}.bmp'.format(item.fname[:-4], RECOLORS[0])
     res = run_process([COLORIZE, nu, out] + color_options(), capture_output=True, text=True)
     if res.returncode != 0 or not os.path.exists(out):
-        QMessageBox.warning(window, 'Recolour failed', (res.stderr or 'colorize failed').strip())
+        QMessageBox.warning(window, 'Recolor failed', (res.stderr or 'colorize failed').strip())
         return False
     SHOWN[item.fname] = out
     pixmap = QPixmap(out)
@@ -125,7 +145,7 @@ def recolor(item):
 
 
 def on_color_change(*_):
-    """A colour control changed: recolour the view on screen at once (new renders use the settings too)."""
+    """A color control changed: recolor the view on screen at once (new renders use the settings too)."""
     with WaitCurs():
         if recolor(MAP.curr):
             reg.setPixmap(QPixmap(image_path(MAP.curr)))
@@ -213,14 +233,66 @@ class WaitCurs(object):
 
 
 class PicRegion(QLabel):
+    """The image view. The picture is scaled up evenly (never stretched) to fill the label and centred in it, so a
+    bigger window gives a bigger image. To use more of a wide or tall window a little may be cropped off the edges,
+    at most MAX_CROP of the picture's width or height, where there is usually only background. The selection box
+    keeps the image's own shape, and mouse positions are mapped back to pixels of the real image."""
+
     def __init__(self, parent = None):
         QLabel.__init__(self, parent)
         self.rubberBand = QRubberBand(QRubberBand.Rectangle, self)
         self.origin = QPoint()
         self.cand_xyw = LogXYW(*RESET_COORDS)
-        # the pixmap must start at the label's top-left so mouse positions map straight to image pixels
-        self.setAlignment(Qt.AlignLeft | Qt.AlignTop)
-    
+        self.source = QPixmap()
+        self.setAlignment(Qt.AlignCenter)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+
+    def sizeHint(self):
+        return QSize(PIX_WID, PIX_HGT)
+
+    def minimumSizeHint(self):
+        return QSize(PIX_WID // 3, PIX_HGT // 3)
+
+    def setPixmap(self, pixmap):
+        self.source = pixmap
+        self.refit()
+
+    def layout_image(self):
+        """How the image sits in the label: (scale, scaled width, scaled height, cropped width, cropped height).
+
+        The scale is the one that fits the whole image, raised until the label is covered or MAX_CROP of the
+        image would be cut off, whichever comes first. The cropped size is the part that shows."""
+        rect = self.contentsRect()
+        fit = min(rect.width() / PIX_WID, rect.height() / PIX_HGT)
+        cover = max(rect.width() / PIX_WID, rect.height() / PIX_HGT)
+        scale = max(min(cover, fit / (1.0 - MAX_CROP)), 1e-3)
+        sw, sh = max(round(PIX_WID * scale), 1), max(round(PIX_HGT * scale), 1)
+        return scale, sw, sh, min(sw, rect.width()), min(sh, rect.height())
+
+    def refit(self):
+        """Show the source image as large as fits, cropped evenly at the edges if it overflows."""
+        scale, sw, sh, cw, ch = self.layout_image()
+        if self.source.isNull() or (sw, sh) == (self.source.width(), self.source.height()) == (cw, ch):
+            QLabel.setPixmap(self, self.source)
+            return
+        big = self.source.scaled(sw, sh, Qt.IgnoreAspectRatio, Qt.SmoothTransformation)
+        QLabel.setPixmap(self, big.copy((sw - cw) // 2, (sh - ch) // 2, cw, ch))
+
+    def resizeEvent(self, event):
+        QLabel.resizeEvent(self, event)
+        self.rubberBand.hide()
+        self.refit()
+
+    def view(self):
+        """(left, top, scale): where the image's top-left corner is in the label (negative if cropped) and
+        label pixels per image pixel."""
+        if self.source.isNull():
+            return 0, 0, 1.0
+        rect = self.contentsRect()
+        scale, sw, sh, cw, ch = self.layout_image()
+        return (rect.x() + (rect.width() - cw) // 2 - (sw - cw) // 2,
+                rect.y() + (rect.height() - ch) // 2 - (sh - ch) // 2, scale)
+
     def mousePressEvent(self, event):
         self.rubberBand.hide()
         if event.button() == Qt.LeftButton:
@@ -238,9 +310,10 @@ class PicRegion(QLabel):
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.LeftButton:
             geom = self.rubberBand.geometry()
-            pixx = geom.bottomLeft().x()
-            pixy = PIX_HGT - geom.bottomLeft().y()
-            pixw = geom.width() 
+            left, top, scale = self.view()
+            pixx = round((geom.bottomLeft().x() - left) / scale)
+            pixy = PIX_HGT - round((geom.bottomLeft().y() - top) / scale)
+            pixw = round(geom.width() / scale)
             if pixw > 10: 
                 cur = MAP.curr.xywd
                 self.cand_xyw.x, self.cand_xyw.y, self.cand_xyw.w = selection_to_region(
@@ -250,11 +323,18 @@ class PicRegion(QLabel):
 
 
 def show_coords(x, y, w):
-    """Fill the read-only coordinate boxes; the tooltip carries the full text of a very long value."""
+    """Fill the read-only coordinate boxes. A very long value is shown abbreviated (leading digits, an ellipsis,
+    trailing digits, and its power of ten); the exact text is kept on the box and in its tooltip."""
     for box, value in ((xbox, x), (ybox, y), (wbox, w)):
-        box.setText(str(value))
+        box.setText(abbreviate(value))
         box.setToolTip(str(value))
+        box.setProperty('exact', str(value))
         box.setCursorPosition(0)
+
+
+def exact(box):
+    """The full text of the value a coordinate box stands for."""
+    return box.property('exact')
 
 
 def iteration_text(index):
@@ -306,9 +386,9 @@ def on_run():
     global MAP
     with WaitCurs():
         reg.cand_xyw.d = inter.currentIndex()
-        xval = xbox.text()
-        yval = ybox.text()
-        wval = wbox.text()
+        xval = exact(xbox)
+        yval = exact(ybox)
+        wval = exact(wbox)
         ival = inter.currentText()
         cmd = [os.path.join(BIN_DIR, RENDERER), xval, yval, wval, MAP.fname, ival]
         refname = None
@@ -332,7 +412,7 @@ def on_run():
             stderr.write(problem + '\n')
             QMessageBox.warning(window, 'Render failed', problem)
             return
-        SHOWN.pop(MAP.fname, None)      # a fresh render replaces any earlier recolouring of this file name
+        SHOWN.pop(MAP.fname, None)      # a fresh render replaces any earlier recoloring of this file name
         added = MAP.add(XYWD(reg.cand_xyw.x, reg.cand_xyw.y, reg.cand_xyw.w, int(reg.cand_xyw.d)))
         scr_layout.insertWidget(0, MAP.curr.icon)
         fset(MAP.curr) 
@@ -409,12 +489,12 @@ if __name__ == '__main__':
     pal_box = QComboBox()
     pal_box.addItems(palette_names())
     pal_box.setCurrentText('twilight')
-    pal_box.setToolTip('Colour scheme')
+    pal_box.setToolTip('Color scheme')
     map_box = QComboBox()
     map_box.addItems(MAPPINGS)
-    map_box.setToolTip('histogram: spread the colours evenly over the image (any depth)\n'
-                       'linear: a fixed number of iterations per colour cycle\n'
-                       'log: colour cycles per doubling of the iteration count')
+    map_box.setToolTip('histogram: spread the colors evenly over the image (any depth)\n'
+                       'linear: a fixed number of iterations per color cycle\n'
+                       'log: color cycles per doubling of the iteration count')
     scale_box = QDoubleSpinBox()
     scale_box.setRange(0.0, 1000000.0)
     scale_box.setDecimals(2)
@@ -433,28 +513,26 @@ if __name__ == '__main__':
         control.currentIndexChanged.connect(on_color_change)
     for control in (scale_box, shift_box):
         control.valueChanged.connect(on_color_change)
-    vbox = QVBoxLayout()
-    vbox.addWidget(reg)
-    # The selection fields stack vertically, each with a label, and stretch across the full width
-    # so long (deep-zoom) coordinates stay readable; the buttons sit in a column beside them.
-    form = QFormLayout()
-    form.setFieldGrowthPolicy(QFormLayout.ExpandingFieldsGrow)
-    form.addRow('Selection X coordinate (LLC):', xbox)
-    form.addRow('Selection Y coordinate (LLC):', ybox)
-    form.addRow('Selection width:', wbox)
-
-    btnbox = QVBoxLayout()
+    # Everything but the picture lives in one narrow column on the right, so the picture gets the whole
+    # height of the window.
+    # The selection fields stack vertically, each under its label; long (deep-zoom) values scroll in the
+    # box and show in full in its tooltip.
+    sel_form = QFormLayout()
+    sel_form.setRowWrapPolicy(QFormLayout.WrapAllRows)
+    sel_form.addRow('X coordinate (lower left):', xbox)
+    sel_form.addRow('Y coordinate (lower left):', ybox)
+    sel_form.addRow('Width:', wbox)
+    btnbox = QHBoxLayout()
+    btnbox.setSpacing(4)
     btnbox.addWidget(run)
     btnbox.addWidget(back)
     btnbox.addWidget(save)
     btnbox.addWidget(reset)
-
-    hbox = QHBoxLayout()
-    hbox.addLayout(form, 1)
-    hbox.addLayout(btnbox)
-    vbox.addLayout(hbox)
-    lside = QWidget()
-    lside.setLayout(vbox) 
+    sel_box = QVBoxLayout()
+    sel_box.addLayout(sel_form)
+    sel_box.addLayout(btnbox)
+    sel_group = QGroupBox('Selection')
+    sel_group.setLayout(sel_box)
     rside = QWidget()
     scr_layout = QVBoxLayout()
     rside.setLayout(scr_layout) 
@@ -469,7 +547,7 @@ if __name__ == '__main__':
     color_form.addRow('Mapping:', map_box)
     color_form.addRow('Scale:', scale_box)
     color_form.addRow('Shift:', shift_box)
-    color_group = QGroupBox('Colours')
+    color_group = QGroupBox('Colors')
     color_group.setLayout(color_form)
     iter_form = QFormLayout()
     iter_form.addRow('Multiplier:', inter)
@@ -480,14 +558,21 @@ if __name__ == '__main__':
     iter_group = QGroupBox('Iterations')
     iter_group.setLayout(iter_box)
     right = QVBoxLayout()
+    right.setContentsMargins(0, 0, 0, 0)
+    right.addWidget(sel_group)
     right.addWidget(iter_group)
     right.addWidget(color_group)
     right.addWidget(scroll, 1)
+    side = QWidget()
+    side.setLayout(right)
+    side.setFixedWidth(SIDE_WID)
     wholescr = QHBoxLayout()
-    wholescr.addWidget(lside)
-    wholescr.addLayout(right)
+    wholescr.setContentsMargins(6, 6, 6, 6)
+    wholescr.addWidget(reg, 1)
+    wholescr.addWidget(side)
     window.setLayout(wholescr) 
     window.setWindowTitle(TITLE)
+    window.setStyleSheet(DARK_STYLE)
     ensure_start_image()
     fset(MAP.curr)
     # fit the layout (it can be enlarged; the fields grow with the window)

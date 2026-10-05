@@ -4,7 +4,7 @@
 #include <string.h>
 #include "colorize.h"
 
-/* ---- colour spaces: palettes are interpolated in OKLab so that blends look even ---------------- */
+/* ---- color spaces: palettes are interpolated in OKLab so that blends look even ---------------- */
 
 typedef struct { double L, a, b; } Lab;
 
@@ -38,7 +38,7 @@ static uint32_t lab_to_rgb(Lab c) {
     return ((uint32_t)(r * 255.0 + 0.5) << 16) | ((uint32_t)(g * 255.0 + 0.5) << 8) | (uint32_t)(b * 255.0 + 0.5);
 }
 
-/* ---- the palettes: closed loops through a few key colours, smoothed with a periodic Catmull-Rom spline */
+/* ---- the palettes: closed loops through a few key colors, smoothed with a periodic Catmull-Rom spline */
 
 #define MAX_STOPS 16
 typedef struct {
@@ -105,7 +105,7 @@ static void build_rainbow(uint32_t *table) {
     }
 }
 
-/* The original palette, unchanged: 952 colours ramping red -> yellow -> green -> cyan -> blue ->
+/* The original palette, unchanged: 952 colors ramping red -> yellow -> green -> cyan -> blue ->
  * purple -> gray. It does not close on itself, so the loop plays it forwards then backwards. */
 static int classic_ramp(uint32_t *pp) {
     uint32_t *start = pp;
@@ -239,7 +239,7 @@ int colorize_parse_option(ColorOpts *o, const char *arg, char *err, size_t errle
     if (klen == 10 && !strncmp(arg, "--interior", 10)) {
         const unsigned long v = strtoul(val, &end, 16);
         if (strlen(val) != 6 || *end || v > 0xFFFFFF) {
-            fail(err, errlen, "bad --interior colour '%s' (six hex digits, e.g. 000000)", val);
+            fail(err, errlen, "bad --interior color '%s' (six hex digits, e.g. 000000)", val);
             return -1;
         }
         o->interior = (uint32_t)v;
@@ -248,7 +248,7 @@ int colorize_parse_option(ColorOpts *o, const char *arg, char *err, size_t errle
     return 0;
 }
 
-/* ---- nu -> position -> colour ------------------------------------------------------------------- */
+/* ---- nu -> position -> color ------------------------------------------------------------------- */
 
 static int cmp_double(const void *a, const void *b) {
     const double x = *(const double *)a, y = *(const double *)b;

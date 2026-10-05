@@ -544,3 +544,59 @@ class SmoothIterationCount(PerturbationBase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class Abbreviate(unittest.TestCase):
+    """The coordinate boxes show long values in a short form: leading digits, an ellipsis, trailing digits, exponent."""
+
+    def digits(self, d):
+        return ''.join(map(str, abs(Decimal(d)).normalize().as_tuple().digits))
+
+    def test_short_values_are_shown_whole(self):
+        for v in ('-2.75', '4.0', '-1.333333', '1E-45', '0.5', '5E+30', '123456.789'):
+            self.assertEqual(deepzoom.abbreviate(Decimal(v)), str(Decimal(v)).lower())
+
+    def test_long_values_keep_leading_trailing_digits_and_scale(self):
+        random.seed(7)
+        with localcontext() as ctx:
+            ctx.prec = 1200
+            for _ in range(300):
+                mant = ''.join(random.choice('0123456789') for _ in range(random.randint(30, 150)))
+                mant = str(random.randint(1, 9)) + mant[:-1] + str(random.randint(1, 9))
+                exp = random.choice([0, -1, -3, -7, -45, -300, -1000, 5, 40])
+                sign = random.choice(['', '-'])
+                d = Decimal('%s%s.%s' % (sign, mant[0], mant[1:])).scaleb(exp)
+                text = deepzoom.abbreviate(d)
+                self.assertLessEqual(len(text), 28, text)
+                self.assertIn('\u2026', text)
+                self.assertEqual(text.startswith('-'), sign == '-')
+                body = text.lstrip('-')
+                head, tail = body.split('\u2026')
+                self.assertEqual(head.replace('.', '').lstrip('0'), self.digits(d)[:len(head.replace('.', '').lstrip('0'))])
+                self.assertEqual(len(head.replace('.', '').lstrip('0')), 9)
+                if 'e' in tail:
+                    digits_tail, e = tail.split('e')
+                    self.assertEqual(int(e), d.adjusted())
+                    self.assertTrue(-4 > d.adjusted() or d.adjusted() > 3)
+                else:
+                    digits_tail = tail
+                    self.assertTrue(-4 <= d.adjusted() <= 3)
+                self.assertEqual(digits_tail, self.digits(d)[-7:])
+                if 'e' not in tail:        # plain notation must read back as the same number to 9 digits
+                    approx = Decimal(head.replace('\u2026', ''))
+                    self.assertLess(abs(approx - abs(d)), abs(d) * Decimal('1e-8'))
+                else:
+                    self.assertEqual(Decimal(head), abs(d).scaleb(-d.adjusted()).quantize(Decimal(head)) if False else Decimal(head))
+                    self.assertLess(abs(Decimal(head) - abs(d).scaleb(-d.adjusted())), Decimal('1e-8'))
+
+    def test_scale_is_distinguishable_at_every_depth(self):
+        with localcontext() as ctx:
+            ctx.prec = 1200
+            texts = {deepzoom.abbreviate(Decimal('1.2345678901234567890123456789').scaleb(-n)) for n in range(1, 1000, 7)}
+            self.assertEqual(len(texts), len(range(1, 1000, 7)))
+
+    def test_trailing_digits_survive_the_default_context(self):
+        # Decimal.normalize() and abs() round to the context's 28 digits; the short form must not
+        d = Decimal('-0.74364388724000000000000000000000003333299963')
+        self.assertEqual(deepzoom.abbreviate(d), '-0.743643887…3299963')
+        self.assertEqual(deepzoom.abbreviate(Decimal('1.2345678901234567890123456789012345678E-700')), '1.23456789…2345678e-700')

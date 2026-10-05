@@ -29,7 +29,7 @@
 
 /* Continuous iteration count for a pixel that escaped at 0-based iteration idx (so idx+1 updates
  * had been applied) with |z|^2 = zz > BAILOUT2. It is the same on both sides of an iteration-count
- * band edge (z_n ~ z_{n-1}^2), so colouring by it has no bands. Never negative. */
+ * band edge (z_n ~ z_{n-1}^2), so coloring by it has no bands. Never negative. */
 HD static inline double smooth_nu(int idx, double zz) {
     const double nu = (double)idx + 2.0 - log2(0.5 * log2(zz));
     return nu > 0.0 ? nu : 0.0;

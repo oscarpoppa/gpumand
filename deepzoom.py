@@ -54,6 +54,33 @@ def digits_for(w):
     return max(30, -Decimal(w).adjusted() + 30)
 
 
+def abbreviate(value, head=9, tail=7, limit=24):
+    """Short text for a long Decimal that still shows its scale: leading digits, an ellipsis, trailing digits,
+    and the power of ten when the number is not near 1 (e.g. 1.23456789…45678901e-45). Values that fit in
+    `limit` characters are shown whole. The leading digits give the value, the exponent its size, and the
+    trailing digits tell nearby points apart at depth."""
+    d = Decimal(value)
+    whole = str(d).lower()
+    if len(whole) <= limit:
+        return whole
+    sign = '-' if d < 0 else ''
+    digits = ''.join(map(str, d.as_tuple().digits)).rstrip('0') or '0'     # (not normalize(): that rounds to the context)
+    adj = d.adjusted()                       # power of ten of the leading digit
+    if len(digits) > head + tail:
+        lead, trail = digits[:head], '…' + digits[-tail:]
+    else:
+        lead, trail = digits, ''
+    if -4 <= adj <= 3:                       # near 1: plain notation, 0.743643887…1234567
+        if adj >= 0:
+            lead = lead.ljust(adj + 1, '0')
+            text = lead[:adj + 1] + ('.' + lead[adj + 1:] if lead[adj + 1:] or trail else '')
+        else:
+            text = '0.' + '0' * (-adj - 1) + lead
+        return sign + text + trail
+    text = lead[0] + ('.' + lead[1:] if lead[1:] else '')
+    return '{}{}{}e{}{}'.format(sign, text, trail, '-' if adj < 0 else '+', abs(adj))
+
+
 def selection_to_region(x, y, w, pixx, pixy, pixw, pixwid, pixhgt):
     """Map a rubber-band selection to a new (x, y, w), all exact Decimals.
 

@@ -58,10 +58,18 @@ def check(name, cond, detail=''):
         failures.append(name)
 
 
+def exact(g, name):
+    """The full-precision value behind a coordinate box (the box itself may show it abbreviated)."""
+    return g[name].property('exact')
+
+
 def release(g, x, y, w):
-    """Simulate dragging a rubber band of width w with lower-left at pixel (x, y from top)."""
+    """Simulate dragging a rubber band of width w with lower-left at image pixel (x, y from top); the picture
+    may be drawn scaled and cropped, so the band is placed where those pixels appear on screen."""
+    QtWidgets.QApplication.processEvents()
     h = int(w * 800 / 1200)
-    g['reg'].rubberBand.setGeometry(QtCore.QRect(x, y, w, h))
+    left, top, scale = g['reg'].view()
+    g['reg'].rubberBand.setGeometry(QtCore.QRect(left + round(x * scale), top + round(y * scale), round(w * scale), round(h * scale)))
     ev = QtGui.QMouseEvent(QtCore.QEvent.MouseButtonRelease, QtCore.QPointF(x, y), QtCore.Qt.LeftButton,
                            QtCore.Qt.LeftButton, QtCore.Qt.NoModifier)
     g['reg'].mouseReleaseEvent(ev)
@@ -73,7 +81,7 @@ TARGET = (Decimal('-0.743643887037158704752191506114774'), Decimal('0.1318259042
 
 def aim(g, box=120):
     """Rubber-band (left, top, width) of a box centred on TARGET in the current view."""
-    x, y, w = (Decimal(g[n].text()) for n in ('xbox', 'ybox', 'wbox'))
+    x, y, w = (Decimal(exact(g, n)) for n in ('xbox', 'ybox', 'wbox'))
     with localcontext() as ctx:
         ctx.prec = 100
         px = int((TARGET[0] - x) / w * 1200)
@@ -103,14 +111,23 @@ def drive():
     check('selection boxes stack top to bottom', ys == sorted(ys) and len(set(ys)) == 3, ys)
     xs = {pos(n).x() for n in ('xbox', 'ybox', 'wbox')}
     check('coordinate boxes line up in one column', len(xs) == 1, xs)
+    run_pos = g['run'].mapTo(window, QtCore.QPoint(0, 0))
+    check('the buttons sit under the coordinate boxes', run_pos.y() > pos('wbox').y(), (run_pos, pos('wbox')))
+    ip = g['reg'].mapTo(window, QtCore.QPoint(0, 0))
+    row = [g[n].mapTo(window, QtCore.QPoint(0, 0)) for n in ('run', 'back', 'save', 'reset')]
+    check('Run, Back, Save and Reset are in one row in that order', len({p.y() for p in row}) == 1 and
+          [p.x() for p in row] == sorted(p.x() for p in row), row)
+    check('the buttons are small and fit the column', all(g[n].width() < 80 for n in ('reset', 'run', 'back', 'save')) and
+          row[3].x() + g['reset'].width() <= pos('xbox').x() + g['xbox'].width() + 2, [g[n].width() for n in ('reset', 'run', 'back', 'save')])
+    check('the picture has the whole window height', g['reg'].height() >= window.height() - 20, (g['reg'].height(), window.height()))
+    side_x = g['side'].mapTo(window, QtCore.QPoint(0, 0)).x()
+    check('all the controls are in one column right of the picture', ip.x() + g['reg'].width() <= side_x and
+          all(pos(n).x() >= side_x for n in ('xbox', 'run', 'back', 'save', 'iter_dial', 'pal_box')), side_x)
     fm = g['xbox'].fontMetrics()
-    check('coordinate boxes are wide (room for 80+ digits)', g['xbox'].width() > fm.horizontalAdvance('0' * 80), g['xbox'].width())
-    check('boxes do not run over the buttons', pos('xbox').x() + g['xbox'].width() <= g['run'].mapTo(window, QtCore.QPoint(0, 0)).x(),
-          (pos('xbox').x() + g['xbox'].width(), g['run'].mapTo(window, QtCore.QPoint(0, 0)).x()))
     check('multiplier box shows 4-digit values', g['inter'].width() >= fm.horizontalAdvance('1000'), g['inter'].width())
     dial = g['iter_dial']
     check('there is an iteration dial, big enough to use, beside the image', dial.width() >= 80 and
-          dial.mapTo(window, QtCore.QPoint(0, 0)).x() > g['reg'].mapTo(window, QtCore.QPoint(0, 0)).x() + 1100, dial.size())
+          dial.mapTo(window, QtCore.QPoint(0, 0)).x() > g['reg'].mapTo(window, QtCore.QPoint(0, 0)).x() + g['reg'].width() - 1, dial.size())
     check('the dial has one notch per multiplier', dial.minimum() == 0 and dial.maximum() == g['inter'].count() - 1, (dial.minimum(), dial.maximum()))
     check('the readout shows the iteration limit', g['iter_label'].text() == '\u00d71 = 2,000 iterations', g['iter_label'].text())
     # turning the dial moves the multiplier box and the readout; the next render uses it
@@ -127,12 +144,12 @@ def drive():
           window.height() >= window.minimumSizeHint().height(), (window.size(), window.minimumSizeHint()))
 
     # -- the view starts on the full set
-    check('starts at the reset view', (g['xbox'].text(), g['wbox'].text()) == ('-2.75', '4.0'),
-          (g['xbox'].text(), g['wbox'].text()))
+    check('starts at the reset view', (exact(g, 'xbox'), exact(g, 'wbox')) == ('-2.75', '4.0'),
+          (exact(g, 'xbox'), exact(g, 'wbox')))
 
     # -- a selection becomes exact Decimal coordinates
     release(g, 300, 500, 600)
-    x, w = Decimal(g['xbox'].text()), Decimal(g['wbox'].text())
+    x, w = Decimal(exact(g, 'xbox')), Decimal(exact(g, 'wbox'))
     check('selection maps to exact coordinates', (x, w) == (Decimal('-1.75'), Decimal('2')), (x, w))
     check('reset constant is not mutated by selections', str(g['LOG_RESET'].w) == '4.0', g['LOG_RESET'].w)
 
@@ -153,7 +170,7 @@ def drive():
     else:
         first = [c.split() for c in calls() if c.strip() and 'mandapp0.bmp' in c][0]    # (the start-up render comes before it)
         check('mand called with x y w file multiplier', len(first) >= 5 and Decimal(first[0]) == Decimal('-1.75') and Decimal(first[2]) == 2, first)
-        check('mand is told the colour settings and where to save the counts',
+        check('mand is told the color settings and where to save the counts',
               '--palette=twilight' in first and '--mapping=histogram' in first and any(f.startswith('--nu-out=') for f in first), first)
 
     # -- the dial's choice reaches the renderer and is remembered with the view
@@ -209,10 +226,10 @@ def drive():
     for i in range(30):
         release(g, *aim(g))
         g['on_run']()
-        if Decimal(g['wbox'].text()) < Decimal('1e-9'):
+        if Decimal(exact(g, 'wbox')) < Decimal('1e-9'):
             deep = True
             break
-    check('reached a deep view', deep, g['wbox'].text())
+    check('reached a deep view', deep, exact(g, 'wbox'))
     if REAL:
         check('deep render produced a proper image', image_ok(MAP.curr.fname), MAP.curr.fname)
         leftovers = [f for f in os.listdir(os.path.join(tmp, 'pix')) if f.endswith('.ref')]
@@ -224,28 +241,41 @@ def drive():
         check('reference orbit existed when mand ran', 'REF_EXISTED' in last)
         refs = [f for c in deep_call for f in c.split() if f.endswith('.ref')]
         check('reference orbit file is cleaned up afterwards', refs and not any(os.path.exists(r) for r in refs), refs)
-    check('long values are readable in full from the tooltip', g['xbox'].toolTip() == g['xbox'].text() and len(g['xbox'].text()) > 20, g['xbox'].toolTip())
-    check('coordinates keep their digits (not rounded through a float)',
-          len(g['xbox'].text().replace('-', '').replace('.', '')) > 20, g['xbox'].text())
+    xfull, wfull = exact(g, 'xbox'), exact(g, 'wbox')
+    if not REAL:
+        check('the render was given the full digits, not the short form',
+              xfull in deep_call[-1].split() and wfull in deep_call[-1].split(), (xfull, wfull, deep_call[-1:]))
+    check('long values are readable in full from the tooltip', g['xbox'].toolTip() == xfull and len(xfull) > 20, g['xbox'].toolTip())
+    check('coordinates keep their digits (not rounded through a float)', len(xfull.replace('-', '').replace('.', '')) > 20, xfull)
+    # the boxes show a short form that still tells the scale: leading digits, an ellipsis, trailing digits, power of ten
+    fm = g['xbox'].fontMetrics()
+    for name in ('xbox', 'ybox', 'wbox'):
+        shown, full = g[name].text(), exact(g, name)
+        check('%s shows an abbreviated form when long' % name, ('\u2026' in shown and len(shown) < len(full)) or shown == full.lower(), (shown, full))
+        check('%s abbreviation fits in its box' % name, fm.horizontalAdvance(shown) < g[name].width() - 16, (shown, g[name].width()))
+    wshown = g['wbox'].text()
+    check('the width shows its power of ten', wshown.rsplit('e', 1)[-1].lstrip('+-').isdigit() and
+          int(wshown.rsplit('e', 1)[-1]) == Decimal(wfull).adjusted(), (wshown, wfull))
+    check('a long coordinate really is abbreviated in its box', '\u2026' in g['xbox'].text(), g['xbox'].text())
     check('the renderer setting is honoured', g['RENDERER'] == ('mand-cpu' if REAL else 'mand'), g['RENDERER'])
 
     # -- Back / thumbnails / Reset
     depth = len(list(MAP))
     g['on_back']()
-    check('Back moves to the parent view', Decimal(g['wbox'].text()) > Decimal('1e-9'), g['wbox'].text())
+    check('Back moves to the parent view', Decimal(exact(g, 'wbox')) > Decimal('1e-9'), exact(g, 'wbox'))
     g['on_reset']()
-    check('Reset returns to the full set', g['wbox'].text() == '4.0' and len(list(MAP)) == 1, g['wbox'].text())
+    check('Reset returns to the full set', exact(g, 'wbox') == '4.0' and len(list(MAP)) == 1, exact(g, 'wbox'))
     check('history was non-trivial before Reset', depth > 5, depth)
 
-    # -- colour controls
+    # -- color controls
     pal, mapping, scale, shift = g['pal_box'], g['map_box'], g['scale_box'], g['shift_box']
     names = {pal.itemText(i) for i in range(pal.count())}
     check('palette list offers the styles', {'twilight', 'fire', 'classic', 'rainbow'} <= names, names)
     check('default palette is twilight and mapping histogram', pal.currentText() == 'twilight' and mapping.currentText() == 'histogram')
     if not REAL:
         shown = len(dialogs)
-        pal.setCurrentText('ice')                      # nothing saved to recolour: must be harmless
-        check('recolouring with no saved counts is harmless', len(dialogs) == shown)
+        pal.setCurrentText('ice')                      # nothing saved to recolor: must be harmless
+        check('recoloring with no saved counts is harmless', len(dialogs) == shown)
         pal.setCurrentText('twilight')
     else:
         import subprocess
@@ -274,18 +304,18 @@ def drive():
 
         pal.setCurrentText('fire')
         shown_file = g['image_path'](item)
-        check('choosing a palette recolours the view on screen', shown_file != item.fname and os.path.exists(shown_file), shown_file)
-        check('the recoloured image is exactly what colorize makes from the saved counts',
+        check('choosing a palette recolors the view on screen', shown_file != item.fname and os.path.exists(shown_file), shown_file)
+        check('the recolored image is exactly what colorize makes from the saved counts',
               open(shown_file, 'rb').read() == make_expected(nu_file, '--palette=fire', '--mapping=histogram'))
-        check('recolouring did not render again', os.path.getmtime(nu_file) == mtime and len(list(MAP)) == entries)
-        check('the thumbnail was recoloured too', icon_pixels(item) != icons)
-        check('the label shows the recoloured image', g['reg'].pixmap().toImage() == QtGui.QImage(shown_file))
+        check('recoloring did not render again', os.path.getmtime(nu_file) == mtime and len(list(MAP)) == entries)
+        check('the thumbnail was recolored too', icon_pixels(item) != icons)
+        check('the label shows the recolored image', g['reg'].source.toImage() == QtGui.QImage(shown_file))
 
         mapping.setCurrentText('linear')
         scale.setValue(40.0)
         shift.setValue(0.25)
         want = make_expected(nu_file, '--palette=fire', '--mapping=linear', '--scale=40', '--shift=0.25')
-        check('mapping, scale and shift all recolour', open(g['image_path'](item), 'rb').read() == want)
+        check('mapping, scale and shift all recolor', open(g['image_path'](item), 'rb').read() == want)
         scale.setValue(0.0)
         want = make_expected(nu_file, '--palette=fire', '--mapping=linear', '--shift=0.25')
         check('a scale of 0 means the default', open(g['image_path'](item), 'rb').read() == want)
@@ -294,12 +324,12 @@ def drive():
         release(g, *aim(g))
         g['on_run']()
         newer = MAP.curr
-        check('new renders use the chosen colours', open(g['image_path'](newer), 'rb').read() ==
+        check('new renders use the chosen colors', open(g['image_path'](newer), 'rb').read() ==
               make_expected(newer.fname + '.nu', '--palette=fire', '--mapping=linear', '--shift=0.25'))
 
-        # Save writes what is on screen, recoloured
+        # Save writes what is on screen, recolored
         pal.setCurrentText('ocean')
-        saved = os.path.join(saves, 'recoloured.bmp')
+        saved = os.path.join(saves, 'recolored.bmp')
 
         class SaveDlg(object):
             AnyFile = 0
@@ -319,11 +349,11 @@ def drive():
         g['QFileDialog'] = SaveDlg
         g['on_save']()
         g['QFileDialog'] = real_dialog
-        check('Save writes the recoloured image', os.path.exists(saved) and open(saved, 'rb').read() == open(g['image_path'](newer), 'rb').read())
+        check('Save writes the recolored image', os.path.exists(saved) and open(saved, 'rb').read() == open(g['image_path'](newer), 'rb').read())
 
-        # Reset forgets recolourings of the history, then a new render with the same file name shows fresh colours
+        # Reset forgets recolorings of the history, then a new render with the same file name shows fresh colors
         g['on_reset']()
-        check('Reset clears per-view recolouring', list(g['SHOWN']) == [g['STARTFILE']] or list(g['SHOWN']) == [], list(g['SHOWN']))
+        check('Reset clears per-view recoloring', list(g['SHOWN']) == [g['STARTFILE']] or list(g['SHOWN']) == [], list(g['SHOWN']))
         pal.setCurrentText('twilight')
         mapping.setCurrentText('histogram')
         shift.setValue(0.0)
@@ -348,19 +378,61 @@ def drive():
     g['on_save']()
     check('failed save shows a warning dialog', len(dialogs) == shown + 1, dialogs)
 
-    # -- the rubber band's pixel coordinates line up with the image
+    # -- the image grows with the window, never stretched (a little may be cropped), and selections map to image pixels
     reg = g['reg']
-    check('image is anchored at the label origin', bool(reg.alignment() & QtCore.Qt.AlignLeft) and
-          bool(reg.alignment() & QtCore.Qt.AlignTop), int(reg.alignment()))
+    MAXC = g['MAX_CROP']
+    check('image is centred in its label', bool(reg.alignment() & QtCore.Qt.AlignCenter) == True, int(reg.alignment()))
     pm = QtGui.QPixmap(1200, 800)
     pm.fill(QtGui.QColor('red'))
     lab = type(reg)()
     lab.setPixmap(pm)
-    lab.resize(1400, 1000)
+    lab.show()
+    settle = QtWidgets.QApplication.processEvents
+
+    def shown(w, h):
+        lab.resize(w, h)
+        settle()
+        return lab.view() + (lab.pixmap().width(), lab.pixmap().height())
+
+    left, top, scale, pw, ph = shown(1200, 800)
+    check('at its own size the image is drawn 1:1', (left, top, scale, pw, ph) == (0, 0, 1.0, 1200, 800), (left, top, scale, pw, ph))
+    left, top, scale, pw, ph = shown(1800, 1200)        # the same shape, bigger: scales up evenly
+    check('a bigger label of the same shape scales the image up evenly', (left, top, scale, pw, ph) == (0, 0, 1.5, 1800, 1200),
+          (left, top, scale, pw, ph))
+    left, top, scale, pw, ph = shown(1620, 1000)        # wider than 3:2: a little (80 of 1080 px) is cropped off top and bottom
+    check('a wider label crops the top and bottom a little, not stretching',
+          pw == 1620 and ph == 1000 and abs(scale - 1.35) < 0.01 and top == -40 and scale * 800 - ph <= MAXC * scale * 800 + 1,
+          (left, top, scale, pw, ph))
+    check('the crop is symmetric', abs(top + (round(800 * scale) - ph) // 2) <= 1 and left == 0, (left, top))
+    left, top, scale, pw, ph = shown(3000, 1000)        # far wider: crop limited, so there are side margins
+    check('the crop is limited', abs(scale * 800 * (1 - MAXC) - 1000) < 1.5 and ph == 1000 and pw == round(1200 * scale) and left == (3000 - pw) // 2,
+          (left, top, scale, pw, ph))
+    left, top, scale, pw, ph = shown(600, 1200)         # far taller: whole width fits, margins above and below
+    check('a tall label crops the sides only as far as allowed',
+          abs(scale * 1200 * (1 - MAXC) - 600) < 1.5 and pw == 600 and left < 0, (left, top, scale, pw, ph))
+    left, top, scale, pw, ph = shown(3000, 1000)
     img = lab.grab().toImage()
-    check('pixmap draws from the label top-left even if the label is larger',
-          QtGui.QColor(img.pixel(2, 2)).name() == '#ff0000' and QtGui.QColor(img.pixel(1300, 900)).name() != '#ff0000',
-          (QtGui.QColor(img.pixel(2, 2)).name(), QtGui.QColor(img.pixel(1300, 900)).name()))
+    red = lambda x, y: QtGui.QColor(img.pixel(x, y)).name() == '#ff0000'
+    check('the picture is drawn centred in the label', red(left + 5, 5) and red(left + pw - 5, 995) and not red(left - 5, 500) and not red(left + pw + 5, 500))
+    # the selection box keeps the image's own shape
+    ev = lambda kind, x, y: QtGui.QMouseEvent(kind, QtCore.QPointF(x, y), QtCore.Qt.LeftButton, QtCore.Qt.LeftButton, QtCore.Qt.NoModifier)
+    lab.mousePressEvent(ev(QtCore.QEvent.MouseButtonPress, left + 100, 100))
+    lab.mouseMoveEvent(ev(QtCore.QEvent.MouseMove, left + 100 + 400, 300))
+    band = lab.rubberBand.geometry()
+    check('the selection box has the image\'s shape', abs(band.width() / band.height() - 1.5) < 0.02, (band.width(), band.height()))
+    # in the real window, with a shape that crops: a band must choose the region it covers
+    window.resize(window.size() + QtCore.QSize(600, 400))
+    settle()
+    left, top, scale = g['reg'].view()
+    check('enlarging the window enlarges the picture', scale > 1.2, scale)
+    check('the real window gives the image most of its width', g['reg'].width() > window.width() // 2, (g['reg'].width(), window.width()))
+    g['reg'].rubberBand.setGeometry(QtCore.QRect(left + round(300 * scale), top + round(500 * scale), round(600 * scale), round(400 * scale)))
+    g['reg'].mouseReleaseEvent(ev(QtCore.QEvent.MouseButtonRelease, 0, 0))
+    check('a selection on the enlarged picture maps to the right region',
+          abs(Decimal(exact(g, 'xbox')) - Decimal('-1.75')) < Decimal('0.01') and abs(Decimal(exact(g, 'wbox')) - 2) < Decimal('0.01'),
+          (exact(g, 'xbox'), exact(g, 'wbox')))
+    check('the controls column does not grow with the window',
+          g['color_group'].width() < 500, g['color_group'].width())
     return 0
 
 

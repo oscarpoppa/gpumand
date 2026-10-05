@@ -19,12 +19,12 @@ No GPU? `make mand-cpu colorize` builds a CPU-only renderer with the same argume
 Iterations: the Iterations dial in the GUI sets how many iterations a render may use (the multiplier times 2000, shown under the dial, up to
 2,000,000); the multiplier box beside it picks an exact value. A higher limit fills in black areas of deep views, at the cost of time.
 
-Colours: images are coloured from a *smooth* iteration count (no visible bands) through one of several palettes
-(`twilight` is the default; `fire`, `ocean`, `aurora`, `ice`, `sunset`, `gray`, `rainbow`, and the original `classic`). The Colours box in the GUI
+Colors: images are colored from a *smooth* iteration count (no visible bands) through one of several palettes
+(`twilight` is the default; `fire`, `ocean`, `aurora`, `ice`, `sunset`, `gray`, `rainbow`, and the original `classic`). The Colors box in the GUI
 changes palette, mapping, scale and shift on the image you are looking at instantly, without rendering again. Mappings: `histogram` (default,
-spreads the colours evenly whatever the depth), `linear` (a fixed number of iterations per colour cycle) and `log`. On the command line,
+spreads the colors evenly whatever the depth), `linear` (a fixed number of iterations per color cycle) and `log`. On the command line,
 `mand` and `mand-cpu` accept `--palette=NAME --mapping=histogram|linear|log --scale=N --shift=N --interior=RRGGBB` (anywhere on the line), and
-`--nu-out=FILE` to save the raw smooth counts; `colorize FILE.nu OUT.bmp [options]` recolours saved counts without rendering, and
+`--nu-out=FILE` to save the raw smooth counts; `colorize FILE.nu OUT.bmp [options]` recolors saved counts without rendering, and
 `colorize --list-palettes` lists the palettes.
 
 Install:

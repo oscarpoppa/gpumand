@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for the colour module (colorize.c) through the `colorize` tool.
+"""Tests for the color module (colorize.c) through the `colorize` tool.
 
 The mapping and palette-lookup rules are re-implemented here in Python, so the tests check the C
 code against an independent statement of what it is supposed to do.
@@ -87,8 +87,8 @@ class Palettes(unittest.TestCase):
                 self.assertLessEqual(kink, 3, '%s: kink of %d levels at entry %d' % (name, kink, k))
 
     def test_gradients_match_an_independent_oklab_spline(self):
-        """Re-derive palettes from their key colours with the published OKLab matrices and a periodic
-        Catmull-Rom spline; the C tables must agree to within rounding. This also pins the colour
+        """Re-derive palettes from their key colors with the published OKLab matrices and a periodic
+        Catmull-Rom spline; the C tables must agree to within rounding. This also pins the color
         space (checked below against Ottosson's reference values) and the join at the loop's seam."""
         M1 = [[0.4122214708, 0.5363325363, 0.0514459929], [0.2119034982, 0.6806995451, 0.1073969566],
               [0.0883024619, 0.2817188376, 0.6299787005]]
@@ -147,7 +147,7 @@ class Palettes(unittest.TestCase):
             worst = max(abs(g - w) for rgb, wrgb in zip(got, want) for g, w in zip(channels(rgb), wrgb))
             self.assertLessEqual(worst, 1.5, '%s differs from the independent spline by up to %.2f levels' % (name, worst))
 
-    def test_every_palette_uses_many_colours(self):
+    def test_every_palette_uses_many_colors(self):
         for name in palette_names():
             # gray has only 256 shades to offer
             self.assertGreater(len(set(dump_palette(name))), 200 if name == 'gray' else 400, name)
@@ -235,7 +235,7 @@ class Palettes(unittest.TestCase):
             t = k / float(PALETTE_SIZE)
             self.assertEqual(table[k], ramp[int(2.0 * t * (n - 1) + 0.5)], k)
         self.assertEqual(table[0], ramp[0])
-        self.assertEqual(table[PALETTE_SIZE // 2], ramp[-1])      # the turning point: the original's last colour
+        self.assertEqual(table[PALETTE_SIZE // 2], ramp[-1])      # the turning point: the original's last color
         for k in range(1, PALETTE_SIZE // 2, 53):                 # the second half mirrors the first
             self.assertEqual(table[PALETTE_SIZE - k], table[k])
 
@@ -258,7 +258,7 @@ def read_bmp_pixels(path):
     return w, h, list(px)
 
 
-def expected_colours(nu, table, mapping, scale, shift, interior=0):
+def expected_colors(nu, table, mapping, scale, shift, interior=0):
     """Independent implementation of the documented mapping rules (see colorize.h)."""
     escaped = sorted(v for v in nu if v >= 0)
     out = []
@@ -277,14 +277,14 @@ def expected_colours(nu, table, mapping, scale, shift, interior=0):
 
 
 @unittest.skipIf(shutil.which('gcc') is None, 'needs gcc')
-class Colouring(unittest.TestCase):
+class Coloring(unittest.TestCase):
     def setUp(self):
         if TOOL is None:
             self.skipTest('colorize does not build here')
         self.tmp = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, self.tmp, True)
 
-    def colour(self, rows, *options, check=True):
+    def color(self, rows, *options, check=True):
         nuf, out = os.path.join(self.tmp, 'in.nu'), os.path.join(self.tmp, 'out.bmp')
         write_nu(nuf, rows)
         res = subprocess.run([TOOL, nuf, out, *options], capture_output=True, text=True)
@@ -305,9 +305,9 @@ class Colouring(unittest.TestCase):
         rows = self.values()
         opts = ['--palette=' + palette, '--mapping=' + mapping] + (['--scale=%g' % scale] if scale else []) + \
                (['--shift=%g' % shift] if shift else []) + list(extra)
-        w, h, got = self.colour(rows, *opts)
+        w, h, got = self.color(rows, *opts)
         self.assertEqual((w, h), (20, 20))
-        want = expected_colours(self.flat(rows), dump_palette(palette), mapping, scale or default_scale, shift)
+        want = expected_colors(self.flat(rows), dump_palette(palette), mapping, scale or default_scale, shift)
         self.assertEqual(got, want)
 
     def test_histogram_mapping(self):
@@ -329,14 +329,14 @@ class Colouring(unittest.TestCase):
 
     def test_default_palette_and_mapping_are_twilight_and_histogram(self):
         rows = self.values()
-        _, _, plain = self.colour(rows)
-        _, _, explicit = self.colour(rows, '--palette=twilight', '--mapping=histogram', '--scale=2.5')
+        _, _, plain = self.color(rows)
+        _, _, explicit = self.color(rows, '--palette=twilight', '--mapping=histogram', '--scale=2.5')
         self.assertEqual(plain, explicit)
 
-    def test_interior_pixels_get_the_interior_colour(self):
+    def test_interior_pixels_get_the_interior_color(self):
         rows = self.values()
-        _, _, black = self.colour(rows)
-        _, _, custom = self.colour(rows, '--interior=ff00aa')
+        _, _, black = self.color(rows)
+        _, _, custom = self.color(rows, '--interior=ff00aa')
         flat = self.flat(rows)
         self.assertTrue(any(v < 0 for v in flat))
         for v, b, c in zip(flat, black, custom):
@@ -348,30 +348,30 @@ class Colouring(unittest.TestCase):
     def test_shift_rotates_the_palette(self):
         rows = [[100.0 + i for i in range(40)]]
         table = dump_palette('twilight')
-        _, _, quarter = self.colour(rows, '--mapping=linear', '--scale=40', '--shift=0.25')
-        self.assertEqual(quarter, expected_colours(rows[0], table, 'linear', 40.0, 0.25))
+        _, _, quarter = self.color(rows, '--mapping=linear', '--scale=40', '--shift=0.25')
+        self.assertEqual(quarter, expected_colors(rows[0], table, 'linear', 40.0, 0.25))
         # a whole turn changes nothing
-        _, _, base = self.colour(rows, '--mapping=linear', '--scale=40')
-        _, _, turn = self.colour(rows, '--mapping=linear', '--scale=40', '--shift=1')
-        _, _, back = self.colour(rows, '--mapping=linear', '--scale=40', '--shift=-1')
+        _, _, base = self.color(rows, '--mapping=linear', '--scale=40')
+        _, _, turn = self.color(rows, '--mapping=linear', '--scale=40', '--shift=1')
+        _, _, back = self.color(rows, '--mapping=linear', '--scale=40', '--shift=-1')
         self.assertEqual(base, turn)
         self.assertEqual(base, back)
         self.assertNotEqual(base, quarter)
 
     def test_histogram_uses_the_palette_evenly_whatever_the_values(self):
-        # values bunched into a narrow band, as in a deep view: the colours must still spread out
+        # values bunched into a narrow band, as in a deep view: the colors must still spread out
         rng = random.Random(8)
         rows = [[1000.0 + rng.random() * 5.0 for _ in range(100)] for _ in range(100)]
-        _, _, got = self.colour(rows, '--scale=1')
+        _, _, got = self.color(rows, '--scale=1')
         index = {c: i for i, c in enumerate(dump_palette('twilight'))}
         buckets = [0] * 8
         for c in got:
             buckets[index[c] * 8 // PALETTE_SIZE] += 1
         self.assertTrue(all(abs(b - len(got) / 8.0) < len(got) * 0.02 for b in buckets), buckets)
 
-    def test_equal_values_get_equal_colours_and_order_is_kept(self):
+    def test_equal_values_get_equal_colors_and_order_is_kept(self):
         rows = [[5.0, 5.0, 9.0, 9.0, 2.0, 2.0, -1.0, 5.0]]
-        _, _, got = self.colour(rows, '--scale=1')
+        _, _, got = self.color(rows, '--scale=1')
         self.assertEqual(got[0], got[1])
         self.assertEqual(got[0], got[7])
         self.assertEqual(got[2], got[3])
@@ -381,18 +381,18 @@ class Colouring(unittest.TestCase):
         self.assertLess(index[got[0]], index[got[2]])
 
     def test_degenerate_images(self):
-        self.assertEqual(self.colour([[-1.0]])[2], [0])                              # one interior pixel
-        self.assertEqual(self.colour([[-1.0] * 5] * 3)[2], [0] * 15)                 # nothing escapes
-        _, _, one = self.colour([[7.0]])
+        self.assertEqual(self.color([[-1.0]])[2], [0])                              # one interior pixel
+        self.assertEqual(self.color([[-1.0] * 5] * 3)[2], [0] * 15)                 # nothing escapes
+        _, _, one = self.color([[7.0]])
         self.assertEqual(len(one), 1)
-        _, _, same = self.colour([[3.0] * 6] * 2)
+        _, _, same = self.color([[3.0] * 6] * 2)
         self.assertEqual(len(set(same)), 1)
-        w, h, px = self.colour([[1.0 + i for i in range(1)] for _ in range(37)])     # tall and thin
+        w, h, px = self.color([[1.0 + i for i in range(1)] for _ in range(37)])     # tall and thin
         self.assertEqual((w, h, len(px)), (1, 37, 37))
 
     def test_huge_and_tiny_values_are_fine(self):
         for m in ('histogram', 'linear', 'log'):
-            _, _, px = self.colour([[0.0, 1e-300, 1e9, 1e15, -1.0]], '--mapping=' + m)
+            _, _, px = self.color([[0.0, 1e-300, 1e9, 1e15, -1.0]], '--mapping=' + m)
             self.assertEqual(len(px), 5)
 
     def test_rejects_bad_options_and_files(self):
@@ -400,7 +400,7 @@ class Colouring(unittest.TestCase):
         for bad, text in ((['--palette=nope'], 'unknown palette'), (['--mapping=x'], 'unknown mapping'),
                           (['--scale=-1'], '--scale'), (['--shift=zz'], '--shift'), (['--interior=abc'], '--interior'),
                           (['--what=1'], 'unexpected')):
-            res = self.colour(rows, *bad, check=False)
+            res = self.color(rows, *bad, check=False)
             self.assertNotEqual(res.returncode, 0, bad)
             self.assertIn(text, res.stderr)
         res = subprocess.run([TOOL, os.path.join(self.tmp, 'missing.nu'), os.path.join(self.tmp, 'o.bmp')], capture_output=True, text=True)

@@ -1,4 +1,4 @@
-# `make` builds the CUDA renderer (mand) and the colour tool; `make mand-cpu colorize` is the no-GPU build.
+# `make` builds the CUDA renderer (mand) and the color tool; `make mand-cpu colorize` is the no-GPU build.
 # Override for your GPU, e.g.  make ARCH=sm_86   (or override CFLAGS wholesale)
 ARCH ?= sm_50
 CFLAGS = -Xptxas -O3 -Xcompiler -O3 -arch=$(ARCH)
@@ -40,7 +40,7 @@ CPUHDR = colorize.h bmp.h get-coords.h bla.h refio.h pert.h mtypes.h iter.h aspe
 mand-cpu: $(CPUSRC) $(CPUHDR)
 	$(CPUCC) $(CPUFLAGS) -std=gnu99 -ffp-contract=off -fopenmp -Wall -Wextra -o mand-cpu $(CPUSRC) -lm
 
-# Recolours saved smooth-iteration-count files (mand --nu-out=FILE) without rendering again.
+# Recolors saved smooth-iteration-count files (mand --nu-out=FILE) without rendering again.
 colorize: colorize-main.c colorize.c bmp.c $(CPUHDR)
 	$(CPUCC) $(CPUFLAGS) -std=gnu99 -Wall -Wextra -o colorize colorize-main.c colorize.c bmp.c -lm
 

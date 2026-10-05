@@ -31,7 +31,7 @@ typedef struct {
 } Init;
 
 // The kernels write one smooth iteration count per pixel (-1 where the point never escapes);
-// colouring happens afterwards on the host (colorize.h), the same code the CPU renderer uses.
+// coloring happens afterwards on the host (colorize.h), the same code the CPU renderer uses.
 
 // Plain double-precision iteration. Good down to a view width of ~1e-9.
 __global__ void MandKern(double* dev_nu_ptr, const Init* dev_init_ptr) {

@@ -3,7 +3,7 @@
 
 Each render is checked against what the maths says it must be: the smooth iteration count (nu)
 of a sampled pixel, read from the --nu-out file, equals the value from direct high-precision
-iteration (or from a Python mirror of the plain kernel). Colouring is tested in test_colorize.py;
+iteration (or from a Python mirror of the plain kernel). Coloring is tested in test_colorize.py;
 here only the pipeline's consistency with the `colorize` tool is checked.
 """
 import os
@@ -122,7 +122,7 @@ class CpuRenderer(unittest.TestCase):
         self.assertEqual(os.path.getsize(out), 54 + 4 * WIDTH * HEIGHT)
         self.assertTrue(any(v == -1.0 for v in nu), 'the whole set has interior pixels')
         self.assertTrue(all(v == -1.0 or v >= 0.0 for v in nu))
-        # interior pixels get the interior colour (black by default); the cardioid's centre is inside
+        # interior pixels get the interior color (black by default); the cardioid's centre is inside
         inside = [i for i, v in enumerate(nu) if v == -1.0]
         self.assertTrue(all(pix[i] == 0 for i in inside[:2000]))
 
@@ -132,7 +132,7 @@ class CpuRenderer(unittest.TestCase):
         self.assertEqual(os.listdir(self.tmp), ['o.bmp'])
 
     def test_image_matches_the_colorize_tool(self):
-        # recolouring a saved nu file must give exactly the image the renderer wrote
+        # recoloring a saved nu file must give exactly the image the renderer wrote
         opts = ['--palette=fire', '--mapping=linear', '--scale=30', '--shift=0.1', '--interior=102030']
         out, _ = self.render(MAND, -0.7436, 0.1318, 1e-3, 1, options=opts)
         nuf = out[:-4] + '.nu'
@@ -219,7 +219,7 @@ class CpuRenderer(unittest.TestCase):
         self.fails('1', '2', '0', out, '1')          # zero width and no reference orbit
         self.fails('1', '2', '3', out, '0')          # multiplier must be at least 1
 
-    def test_rejects_bad_colour_options(self):
+    def test_rejects_bad_color_options(self):
         out = os.path.join(self.tmp, 'o.bmp')
         base = ['-2', '-1.3', '4', out, '1']
         self.fails(*base, '--palette=nonesuch', text='unknown palette')
