@@ -2,3 +2,5 @@
 *.so
 *.bmp
 mand
+__pycache__/
+*.ref
