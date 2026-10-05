@@ -6,13 +6,14 @@ from PyQt5.QtWidgets import (QApplication, QComboBox, QDial, QDoubleSpinBox, QFi
                              QLabel, QLineEdit, QMessageBox, QPushButton, QRubberBand, QScrollArea, QShortcut, QSizePolicy, QVBoxLayout, QWidget)
 from sys import argv, exit, stderr
 from subprocess import call, run as run_process     # `run` is the Run button below
-from shutil import copyfile
+import shutil
 from collections import namedtuple
 from math import ceil
 from configparser import ConfigParser
 from optparse import OptionParser
 from decimal import Decimal
-from cleanup import delete_files, generated_files, remove_stale_references, size_text, total_size
+from cleanup import delete_files, generated_files, move_files, new_folder, split_images, remove_stale_references, size_text, total_size
+from meta import parse_view, read_png_text, view_text
 from deepzoom import abbreviate, ITERATIONS, WIDTH, HEIGHT, PERTURB_BELOW, selection_to_region, write_reference
 
 
@@ -107,6 +108,43 @@ def load_pixmap(path):
     return QPixmap.fromImage(QImage(path))
 
 
+# The color settings each view's image was last drawn with (saved into its PNG).
+VIEW_COLORS = {}
+
+
+def current_colors():
+    return (pal_box.currentText(), map_box.currentText(), scale_box.value(), shift_box.value())
+
+
+def view_meta(item):
+    """The text fields describing a view, for its PNG."""
+    palette, mapping, scale, shift = VIEW_COLORS.get(item.fname) or current_colors()
+    x, y, w, d = item.xywd
+    return view_text(x, y, w, MULTIPLIERS[int(d)], palette, mapping, scale, shift)
+
+
+def write_png(item, source, target):
+    """Save the picture in `source` as a PNG carrying the view's description. Returns an error message or None.
+    Written under a temporary name and moved into place, so a failure never leaves a broken file."""
+    img = QImage(source)
+    if img.isNull():
+        return 'cannot read {}'.format(source)
+    for key, value in view_meta(item).items():
+        img.setText(key, value)
+    part = target + '.part'
+    if not img.save(part, 'PNG'):
+        if os.path.exists(part):
+            os.remove(part)
+        return 'cannot write {}'.format(target)
+    try:
+        os.replace(part, target)
+    except OSError as e:
+        if os.path.exists(part):
+            os.remove(part)
+        return '{}: {}'.format(target, e)
+    return None
+
+
 def nu_name(fname):
     return fname + '.nu'
 
@@ -152,6 +190,7 @@ def recolor(item):
         return False
     os.replace(new, out)
     SHOWN[item.fname] = out
+    VIEW_COLORS[item.fname] = current_colors()
     item.icon.setIcon(QIcon(load_pixmap(out)))
     return True
 
@@ -169,14 +208,15 @@ def ask_cleanup(parent, count, size, reset=False):
         title = 'Reset: delete old files?'
         text = ('Reset clears your zoom history. {} files ({}) in {} belong to views you can no longer go back to.'
                 '\n\nDelete them? Copies you saved with Save are never touched.')
-        more = 'Keeping them leaves them on disk; later renders reuse the names and overwrite them.'
+        more = ('Keeping lets you choose a folder: the pictures are moved there and the raw count files (which only serve '
+                'recoloring) are deleted. Choose pix/ itself to leave everything as it is; later renders reuse the names.')
     else:
         title = 'Delete generated files?'
         text = '{} generated files ({}) are in {}.\n\nDelete them? Copies you saved with Save are never touched.'
-        more = 'Keeping them lets you recolor earlier views without rendering again; the opening view is simply redrawn next time.'
+        more = 'Keeping lets you choose a folder: the pictures are moved there and the raw count files (which only serve recoloring) are deleted. Choose pix/ itself to leave everything as it is.'
     box = QMessageBox(QMessageBox.Question, title, text.format(count, size_text(size), PIX_DIR), QMessageBox.NoButton, parent)
     box.setInformativeText(more)
-    keep = box.addButton('Keep all', QMessageBox.AcceptRole)
+    keep = box.addButton('Keep all\u2026', QMessageBox.AcceptRole)
     delete = box.addButton('Delete all', QMessageBox.DestructiveRole)
     cancel = box.addButton('Cancel', QMessageBox.RejectRole)
     box.setDefaultButton(keep)
@@ -186,8 +226,14 @@ def ask_cleanup(parent, count, size, reset=False):
     return 'keep' if clicked is keep else 'delete' if clicked is delete else 'cancel'
 
 
+def ask_keep_folder(parent):
+    """Ask where to keep the files: a folder path, or None if the user cancelled."""
+    folder = QFileDialog.getExistingDirectory(parent, 'Move the files to which folder?', SAVE_DIR)
+    return folder or None
+
+
 def offer_cleanup(files, reset=False):
-    """Let the user keep or delete `files`. False if they cancelled."""
+    """Let the user delete `files`, or keep them (moved to a folder of their choosing). False if they cancelled."""
     if not files:
         return True
     choice = ask_cleanup(window, len(files), total_size(files), reset=reset)
@@ -197,6 +243,30 @@ def offer_cleanup(files, reset=False):
         failed = delete_files(files)
         if failed:
             QMessageBox.warning(window, 'Delete generated files', '{} files could not be deleted.'.format(failed))
+    else:
+        folder = ask_keep_folder(window)
+        if folder is None:
+            return False        # no place chosen: do not quit or reset after all
+        if os.path.realpath(folder) != os.path.realpath(PIX_DIR):      # choosing pix/ itself leaves them where they are
+            images, counts = split_images(files)
+            where = new_folder(folder)
+            failed = delete_files(counts)           # the raw counts are not worth keeping
+            for path in images:
+                item = MAP[STARTFILE] if path == START_COPY else MAP[path]
+                if item is not None and path == image_path(item):
+                    # a picture of a view in this session becomes a PNG that remembers the view; the original goes
+                    if write_png(item, path, os.path.join(where, os.path.basename(path)[:-4] + '.png')):
+                        failed += 1
+                    else:
+                        failed += delete_files([path])
+                else:
+                    try:                                 # (left over from an earlier session: nothing to say what it shows)
+                        shutil.move(path, os.path.join(where, os.path.basename(path)))
+                    except (OSError, shutil.Error):
+                        failed += 1
+            if failed:
+                QMessageBox.warning(window, 'Keep generated files',
+                                    '{} files could not be moved or deleted (the folder is {}).'.format(failed, where))
     return True
 
 
@@ -260,6 +330,17 @@ class MTree(object):
         self._map[pg.fname] = self._current = pg
         self._count += 1
         return self._current
+
+    def update(self, pg, d):
+        """Record a different iteration multiplier for an existing view (re-rendered in place)."""
+        global INITPG
+        new = pg._replace(xywd=pg.xywd._replace(d=d))
+        if pg.fname == INITPG.fname:
+            INITPG = new        # (Reset starts from it again)
+        self._map[pg.fname] = new
+        if self._current.fname == pg.fname:
+            self._current = new
+        return new
 
     def set(self, pg):
         if pg.fname in self._map:
@@ -447,6 +528,57 @@ def on_reset():
         fset(MAP.reset())
 
 
+def render_view(out, nu, xval, yval, wval, ival):
+    """Run the renderer for a view, writing the image to `out` and its counts to `nu`. Returns a problem
+    description, or None on success."""
+    cmd = [os.path.join(BIN_DIR, RENDERER), xval, yval, wval, out, ival]
+    refname = None
+    if Decimal(wval) < PERTURB_BELOW:
+        # Too deep for plain double: render by perturbation off an arbitrary-precision reference orbit.
+        refname = out + '.ref'
+        write_reference(refname, xval, yval, wval, ITERATIONS * int(ival))
+        cmd.append(refname)
+    cmd += color_options() + ['--nu-out=' + nu]     # options may follow the positional arguments
+    problem = None
+    try:
+        status = call(cmd)
+        if status != 0:
+            problem = '{} exited with status {}'.format(RENDERER, status)
+    except OSError as e:     # e.g. the renderer is not built or not executable
+        problem = 'cannot run {}: {}'.format(cmd[0], e)
+    finally:
+        if refname and os.path.exists(refname):
+            os.remove(refname)
+    return problem
+
+
+def same_region(a, b):
+    return Decimal(a.x) == Decimal(b.x) and Decimal(a.y) == Decimal(b.y) and Decimal(a.w) == Decimal(b.w)
+
+
+def rerender_in_place(item, xval, yval, wval, ival):
+    """Draw the current view again (for instance with a different iteration limit), replacing its image and counts
+    instead of adding a new view. The new files are written beside the old and moved into place on success."""
+    out = START_COPY if item.fname == STARTFILE else item.fname      # (the shipped whole.bmp is never overwritten)
+    nu = nu_name(item.fname)
+    problem = render_view(out + '.new', nu + '.new', xval, yval, wval, ival)
+    if not problem and not (os.path.exists(out + '.new') and os.path.exists(nu + '.new')):
+        problem = '{} did not write its output'.format(RENDERER)
+    if problem:
+        for leftover in (out + '.new', nu + '.new'):
+            if os.path.exists(leftover):
+                os.remove(leftover)
+        return problem
+    os.replace(out + '.new', out)
+    os.replace(nu + '.new', nu)
+    SHOWN[item.fname] = out
+    VIEW_COLORS[item.fname] = current_colors()
+    item = MAP.update(item, inter.currentIndex())
+    item.icon.setIcon(QIcon(load_pixmap(out)))
+    fset(item)
+    return None
+
+
 @pyqtSlot()
 def on_run():
     global MAP
@@ -456,51 +588,71 @@ def on_run():
         yval = exact(ybox)
         wval = exact(wbox)
         ival = inter.currentText()
-        cmd = [os.path.join(BIN_DIR, RENDERER), xval, yval, wval, MAP.fname, ival]
-        refname = None
-        if Decimal(wval) < PERTURB_BELOW:
-            # Too deep for plain double: render by perturbation off an arbitrary-precision reference orbit.
-            refname = MAP.fname + '.ref'
-            write_reference(refname, xval, yval, wval, ITERATIONS * int(ival))
-            cmd.append(refname)
-        cmd += color_options() + ['--nu-out=' + nu_name(MAP.fname)]     # options may follow the positional arguments
-        problem = None
-        try:
-            status = call(cmd)
-            if status != 0:
-                problem = '{} exited with status {}'.format(RENDERER, status)
-        except OSError as e:     # e.g. the renderer is not built or not executable
-            problem = 'cannot run {}: {}'.format(cmd[0], e)
-        finally:
-            if refname and os.path.exists(refname):
-                os.remove(refname)
+        if same_region(reg.cand_xyw, MAP.curr.xywd):
+            # no new selection: this is the same view, so redraw it in place rather than pile up copies
+            problem = rerender_in_place(MAP.curr, xval, yval, wval, ival)
+        else:
+            problem = render_view(MAP.fname, nu_name(MAP.fname), xval, yval, wval, ival)
+            if not problem:
+                SHOWN.pop(MAP.fname, None)      # a fresh render replaces any earlier recoloring of this file name
+                MAP.add(XYWD(reg.cand_xyw.x, reg.cand_xyw.y, reg.cand_xyw.w, int(reg.cand_xyw.d)))
+                VIEW_COLORS[MAP.curr.fname] = current_colors()
+                scr_layout.insertWidget(0, MAP.curr.icon)
+                fset(MAP.curr)
         if problem:
             stderr.write(problem + '\n')
             QMessageBox.warning(window, 'Render failed', problem)
-            return
-        SHOWN.pop(MAP.fname, None)      # a fresh render replaces any earlier recoloring of this file name
-        added = MAP.add(XYWD(reg.cand_xyw.x, reg.cand_xyw.y, reg.cand_xyw.w, int(reg.cand_xyw.d)))
-        scr_layout.insertWidget(0, MAP.curr.icon)
-        fset(MAP.curr) 
 
 
 @pyqtSlot()
 def on_save():
-    dlg = QFileDialog(window, 'Save File', SAVE_DIR, 'Images (*.bmp)')
+    """Save the picture on screen as a PNG that remembers its view (coordinates, iterations, colors)."""
+    dlg = QFileDialog(window, 'Save File', SAVE_DIR, 'PNG images (*.png)')
     dlg.setFileMode(QFileDialog.AnyFile)
     if not dlg.exec_():
         return
-    error = None
     with WaitCurs():
         target = str(dlg.selectedFiles()[0])
-        if not target.endswith('.bmp'):
-            target = '%s.bmp' % target
-        try:
-            copyfile(image_path(MAP.curr), target)
-        except OSError as e:
-            error = '{}: {}'.format(target, e)
+        if not target.lower().endswith('.png'):
+            target = '%s.png' % target
+        error = write_png(MAP.curr, image_path(MAP.curr), target)
     if error:
         QMessageBox.warning(window, 'Save failed', error)
+
+
+@pyqtSlot()
+def on_open():
+    """Open a PNG saved by this program: draw the view it describes as a new view, with its colors."""
+    dlg = QFileDialog(window, 'Open a saved view', SAVE_DIR, 'PNG images (*.png)')
+    dlg.setFileMode(QFileDialog.ExistingFile)
+    if not dlg.exec_():
+        return
+    path = str(dlg.selectedFiles()[0])
+    if not path.lower().endswith('.png'):         # only PNG files, whatever the file chooser let through
+        QMessageBox.warning(window, 'Cannot open {}'.format(os.path.basename(path)), 'only PNG files can be opened')
+        return
+    try:
+        view = parse_view(read_png_text(path))      # (also refuses a file that is named .png but is not one)
+    except (OSError, ValueError) as e:
+        QMessageBox.warning(window, 'Cannot open {}'.format(os.path.basename(path)), str(e))
+        return
+    if view['multiplier'] not in MULTIPLIERS:
+        QMessageBox.warning(window, 'Cannot open {}'.format(os.path.basename(path)),
+                            'the iteration multiplier {} is not one this program offers'.format(view['multiplier']))
+        return
+    for box, value in ((pal_box, view['palette']), (map_box, view['mapping'])):
+        if box.findText(value) >= 0:
+            box.blockSignals(True)          # (set the controls without recoloring the view on screen first)
+            box.setCurrentText(value)
+            box.blockSignals(False)
+    for box, value in ((scale_box, view['scale']), (shift_box, view['shift'])):
+        box.blockSignals(True)
+        box.setValue(value)
+        box.blockSignals(False)
+    reg.cand_xyw.x, reg.cand_xyw.y, reg.cand_xyw.w = view['x'], view['y'], view['w']
+    show_coords(view['x'], view['y'], view['w'])
+    inter.setCurrentIndex(MULTIPLIERS.index(view['multiplier']))
+    on_run()
 
 
 def on_tnclick(logxyw):
@@ -539,6 +691,9 @@ if __name__ == '__main__':
     back.clicked.connect(on_back) 
     save = QPushButton('Save')
     save.clicked.connect(on_save)
+    open_btn = QPushButton('Open a saved view\u2026')
+    open_btn.clicked.connect(on_open)
+    open_btn.setToolTip('Open a PNG saved by this program and draw the view it describes')
     xbox = QLineEdit()
     xbox.setReadOnly(True) 
     ybox = QLineEdit()
@@ -606,6 +761,7 @@ if __name__ == '__main__':
     sel_box = QVBoxLayout()
     sel_box.addLayout(sel_form)
     sel_box.addLayout(btnbox)
+    sel_box.addWidget(open_btn)
     sel_group = QGroupBox('Selection')
     sel_group.setLayout(sel_box)
     rside = QWidget()

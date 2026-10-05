@@ -34,6 +34,7 @@ echo "$@" >> "%s"
 if [ -n "$6" ]; then [ -f "$6" ] && echo "REF_EXISTED" >> "%s"; fi
 if [ -f "%s/fail" ]; then exit 1; fi
 cp "%s/pix/whole.bmp" "$4"
+for a in "$@"; do case "$a" in --nu-out=*) echo counts > "${a#--nu-out=}";; esac; done
 ''' % (log, log, tmp, tmp))
 if not REAL:
     os.chmod(fake, os.stat(fake).st_mode | stat.S_IXUSR)
@@ -44,6 +45,7 @@ with open(ini, 'w') as fp:
     fp.write('renderer=%s   ; which program draws the images\n' % ('mand-cpu' if REAL else 'mand'))
 
 sys.path.insert(0, ROOT)
+from meta import parse_view, read_png_text, view_text      # noqa: E402
 sys.argv = [os.path.join(ROOT, 'mand-gui.py'), '-i', ini]
 os.chdir(tmp)
 
@@ -61,6 +63,31 @@ def check(name, cond, detail=''):
 def exact(g, name):
     """The full-precision value behind a coordinate box (the box itself may show it abbreviated)."""
     return g[name].property('exact')
+
+
+def same_pixels(a, b):
+    """Two images show the same picture (whatever file format they were read from)."""
+    a, b = a.convertToFormat(QtGui.QImage.Format_RGB32), b.convertToFormat(QtGui.QImage.Format_RGB32)
+    return not a.isNull() and a == b
+
+
+def dialog_returning(path):
+    """A stand-in for QFileDialog that picks `path` without showing anything."""
+    class Dlg(object):
+        AnyFile, ExistingFile = 0, 1
+
+        def __init__(self, *a):
+            pass
+
+        def setFileMode(self, *a):
+            pass
+
+        def exec_(self):
+            return True
+
+        def selectedFiles(self):
+            return [path]
+    return Dlg
 
 
 def release(g, x, y, w):
@@ -102,6 +129,7 @@ def drive():
     # Reset and quitting offer to delete files; flows below that reset freely keep them, unless a test says otherwise
     real_ask = g['ask_cleanup']
     g['ask_cleanup'] = lambda parent, count, size, reset=False: 'keep'
+    g['ask_keep_folder'] = lambda parent: g['PIX_DIR']      # (choosing pix/ itself leaves the files where they are)
     dialogs = []
     QtWidgets.QMessageBox.warning = staticmethod(lambda *a, **k: dialogs.append(a))
 
@@ -343,7 +371,7 @@ def drive():
 
         # Save writes what is on screen, recolored
         pal.setCurrentText('ocean')
-        saved = os.path.join(saves, 'recolored.bmp')
+        saved = os.path.join(saves, 'recolored.png')
 
         class SaveDlg(object):
             AnyFile = 0
@@ -363,7 +391,7 @@ def drive():
         g['QFileDialog'] = SaveDlg
         g['on_save']()
         g['QFileDialog'] = real_dialog
-        check('Save writes the recolored image', os.path.exists(saved) and open(saved, 'rb').read() == open(g['image_path'](newer), 'rb').read())
+        check('Save writes the recolored image as a PNG', os.path.exists(saved) and same_pixels(QtGui.QImage(saved), QtGui.QImage(g['image_path'](newer))))
 
         # Reset forgets recolorings of the history, then a new render with the same file name shows fresh colors
         g['on_reset']()
@@ -464,6 +492,164 @@ def drive():
     check('the Run button says so', 'Enter' in g['run'].toolTip(), g['run'].toolTip())
     check('holding Enter does not repeat the run', len(g['run_keys']) == 2 and all(not k.autoRepeat() for k in g['run_keys']))
 
+    # -- changing the iterations and pressing Run again redraws the same view in place
+    pix = os.path.join(tmp, 'pix')
+    g['on_reset']()
+    release(g, 300, 500, 600)
+    g['on_run']()
+    view = MAP.curr
+    nu_file = view.fname + '.nu'
+    names_before, entries = sorted(os.listdir(pix)), len(list(MAP))
+    for f in (view.fname, nu_file):
+        os.utime(f, (1, 1))
+    g['inter'].setCurrentIndex(2)                       # multiplier 3
+    g['on_run']()
+    check('Run on an unchanged region adds no history entry', len(list(MAP)) == entries and MAP.curr.fname == view.fname,
+          (entries, len(list(MAP))))
+    check('redrawing in place leaves no extra files', sorted(os.listdir(pix)) == names_before, set(os.listdir(pix)) ^ set(names_before))
+    check('the image and its counts were replaced', os.path.getmtime(view.fname) > 1000 and os.path.getmtime(nu_file) > 1000)
+    check('the new multiplier is remembered for the view', MAP.curr.xywd.d == 2 and g['inter'].currentIndex() == 2, MAP.curr.xywd)
+    check('the view is the same region', Decimal(MAP.curr.xywd.w) == Decimal(view.xywd.w) and Decimal(MAP.curr.xywd.x) == Decimal(view.xywd.x))
+    if REAL:
+        check('the redrawn image is a proper image', image_ok(g['image_path'](MAP.curr)), g['image_path'](MAP.curr))
+    else:
+        call_line = [c.split() for c in calls() if c.strip() and c.split()[0] != 'REF_EXISTED'][-1]
+        check('the renderer drew the new limit to a temporary name', call_line[4] == '3' and call_line[3] == view.fname + '.new', call_line)
+    check('the label shows the redrawn view', g['reg'].source.toImage() == QtGui.QImage(g['image_path'](MAP.curr)))
+    # a failed redraw leaves the old image and counts alone
+    before_bytes = (open(view.fname, 'rb').read(), open(nu_file, 'rb').read())
+    open(os.path.join(tmp, 'fail'), 'w').close()
+    warned = len(dialogs)
+    g['inter'].setCurrentIndex(4)
+    if REAL:
+        g['RENDERER'], saved_renderer = 'no-such-renderer', g['RENDERER']
+    g['on_run']()
+    if REAL:
+        g['RENDERER'] = saved_renderer
+    os.remove(os.path.join(tmp, 'fail'))
+    check('a failed redraw is reported', len(dialogs) == warned + 1, dialogs[-1:])
+    check('a failed redraw keeps the old files and leaves no temporary ones',
+          (open(view.fname, 'rb').read(), open(nu_file, 'rb').read()) == before_bytes and sorted(os.listdir(pix)) == names_before,
+          set(os.listdir(pix)) ^ set(names_before))
+    check('a failed redraw keeps the view\'s old multiplier', MAP.curr.xywd.d == 2, MAP.curr.xywd)
+    # the opening view redraws into a copy: the shipped whole.bmp is never overwritten
+    g['on_reset']()
+    shipped = open(os.path.join(pix, 'whole.bmp'), 'rb').read()
+    start_copy, start_nu = g['START_COPY'], os.path.join(pix, 'whole.bmp.nu')
+    for f in (start_copy, start_nu):
+        if os.path.exists(f):
+            os.utime(f, (1, 1))
+    g['inter'].setCurrentIndex(1)
+    g['on_run']()
+    check('redrawing the opening view adds no history entry', len(list(MAP)) == 1 and MAP.curr.fname == g['STARTFILE'], len(list(MAP)))
+    check('the shipped whole.bmp is untouched', open(os.path.join(pix, 'whole.bmp'), 'rb').read() == shipped)
+    check('the opening view\'s copy and counts were replaced', os.path.getmtime(start_copy) > 1000 and os.path.getmtime(start_nu) > 1000)
+    check('the opening view remembers the new multiplier', MAP.curr.xywd.d == 1 and g['INITPG'].xywd.d == 1, MAP.curr.xywd)
+    g['inter'].setCurrentIndex(0)
+    g['on_reset']()
+
+    # -- Save writes a PNG that remembers the view; Open draws it again
+    saved_png = os.path.join(saves, 'view.png')
+    g['on_reset']()
+    release(g, 300, 500, 600)
+    g['on_run']()
+    pal, mapping, scale, shift = g['pal_box'], g['map_box'], g['scale_box'], g['shift_box']
+    pal.setCurrentText('fire')
+    mapping.setCurrentText('log')
+    scale.setValue(30.0)
+    shift.setValue(0.25)
+    g['inter'].setCurrentIndex(3)
+    g['on_run']()                                       # same region: redrawn in place with the new settings
+    view_now = MAP.curr
+    want = (Decimal(exact(g, 'xbox')), Decimal(exact(g, 'ybox')), Decimal(exact(g, 'wbox')))
+    real_dialog = g['QFileDialog']
+    g['QFileDialog'] = dialog_returning(saved_png)
+    g['on_save']()
+    got = parse_view(read_png_text(saved_png))
+    check('Save writes a PNG', open(saved_png, 'rb').read(8) == b'\x89PNG\r\n\x1a\n')
+    check('the PNG carries the exact coordinates', (got['x'], got['y'], got['w']) == want, (got['x'], got['y'], got['w'], want))
+    check('the PNG carries the multiplier and the colors',
+          (got['multiplier'], got['palette'], got['mapping'], got['scale'], got['shift']) == (g['MULTIPLIERS'][3], 'fire', 'log', 30.0, 0.25), got)
+    check('the PNG shows the picture on screen', same_pixels(QtGui.QImage(saved_png), QtGui.QImage(g['image_path'](view_now))))
+    g['QFileDialog'] = dialog_returning(os.path.join(saves, 'no-extension'))
+    g['on_save']()
+    check('Save adds .png to a name without it', os.path.exists(os.path.join(saves, 'no-extension.png')), os.listdir(saves))
+    check('Save leaves no temporary files', not [n for n in os.listdir(saves) if n.endswith('.part')], os.listdir(saves))
+    # a long, deep coordinate survives the round trip exactly
+    deep_x = '-0.' + '7436438870371587047521915061147740' * 6
+    img = QtGui.QImage(30, 20, QtGui.QImage.Format_RGB32)
+    for k, v in view_text(deep_x, '0.13', '1.5E-190', g['MULTIPLIERS'][5], 'ocean', 'linear', 40, -0.5).items():
+        img.setText(k, v)
+    deep_png = os.path.join(saves, 'deep.png')
+    img.save(deep_png, 'PNG')
+    check('a 200-digit coordinate survives a PNG', parse_view(read_png_text(deep_png))['x'] == Decimal(deep_x))
+
+    # Open: from somewhere else, with other colors set, the saved view comes back as a new view with its colors
+    g['on_reset']()
+    pal.setCurrentText('twilight')
+    mapping.setCurrentText('histogram')
+    scale.setValue(0.0)
+    shift.setValue(0.0)
+    g['inter'].setCurrentIndex(0)
+    entries, ncalls = len(list(MAP)), len(calls())
+    g['QFileDialog'] = dialog_returning(saved_png)
+    g['on_open']()
+    check('Open adds the saved view to the history', len(list(MAP)) == entries + 1, (entries, len(list(MAP))))
+    check('Open shows its exact coordinates', (Decimal(exact(g, 'xbox')), Decimal(exact(g, 'ybox')), Decimal(exact(g, 'wbox'))) == want)
+    check('Open restores the multiplier', g['inter'].currentIndex() == 3 and MAP.curr.xywd.d == 3, MAP.curr.xywd)
+    check('Open restores the colors', (pal.currentText(), mapping.currentText(), scale.value(), shift.value()) == ('fire', 'log', 30.0, 0.25))
+    if not REAL:
+        call_line = [c.split() for c in calls() if c.strip() and c.split()[0] != 'REF_EXISTED'][-1]
+        check('Open renders with the saved settings', Decimal(call_line[0]) == want[0] and Decimal(call_line[2]) == want[2] and call_line[4] == str(g['MULTIPLIERS'][3])
+              and '--palette=fire' in call_line and '--mapping=log' in call_line and '--scale=30' in call_line and '--shift=0.25' in call_line, call_line)
+    else:
+        check('Open drew a proper image', image_ok(g['image_path'](MAP.curr)), g['image_path'](MAP.curr))
+    entries = len(list(MAP))
+    g['on_open']()
+    check('opening the view that is already showing redraws it in place', len(list(MAP)) == entries, (entries, len(list(MAP))))
+
+    # things that are not usable are refused with a message, and nothing is drawn
+    def refused(path, label):
+        shown_dialogs, n_entries, n_calls = len(dialogs), len(list(MAP)), len(calls())
+        g['QFileDialog'] = dialog_returning(path)
+        g['on_open']()
+        check('Open refuses %s' % label, len(dialogs) == shown_dialogs + 1 and len(list(MAP)) == n_entries and len(calls()) == n_calls,
+              (len(dialogs) - shown_dialogs, dialogs[-1:]))
+    plain = QtGui.QImage(30, 20, QtGui.QImage.Format_RGB32)
+    plain_png = os.path.join(saves, 'plain.png')
+    plain.save(plain_png, 'PNG')
+    refused(plain_png, 'a PNG that has no saved view')
+    notpng = os.path.join(saves, 'text.png')
+    open(notpng, 'w').write('this is not an image')
+    refused(notpng, 'a file that is not a PNG')
+    as_bmp = os.path.join(saves, 'real.bmp')
+    QtGui.QImage(g['image_path'](MAP.curr)).save(as_bmp, 'BMP')
+    refused(as_bmp, 'a BMP image')
+    a_png_with_other_name = os.path.join(saves, 'picture.dat')
+    shutil.copy(saved_png, a_png_with_other_name)
+    refused(a_png_with_other_name, 'a PNG that is not named .png')
+    bmp_named_png = os.path.join(saves, 'disguised.png')
+    shutil.copy(as_bmp, bmp_named_png)
+    refused(bmp_named_png, 'a BMP renamed to .png')
+    jpeg = os.path.join(saves, 'photo.jpg')
+    QtGui.QImage(g['image_path'](MAP.curr)).save(jpeg, 'JPEG')
+    refused(jpeg, 'a JPEG')
+    refused(os.path.join(saves, 'missing.png'), 'a file that does not exist')
+    good_fields = view_text('-1', '0', '2', 1, 'fire', 'log', 0, 0)
+    for label, change in (('a non-numeric width', {'mandelbrot.width': 'wide'}), ('a negative width', {'mandelbrot.width': '-2'}),
+                          ('a multiplier the program does not offer', {'mandelbrot.multiplier': '12345678'}),
+                          ('a multiplier that is not a number', {'mandelbrot.multiplier': 'lots'}),
+                          ('a made-up mapping', {'mandelbrot.mapping': 'sparkle'}),
+                          ('a newer file format', {'mandelbrot.version': '99'}),
+                          ('a huge exponent', {'mandelbrot.x': '1e99999'})):
+        tampered = QtGui.QImage(30, 20, QtGui.QImage.Format_RGB32)
+        for k, v in dict(good_fields, **change).items():
+            tampered.setText(k, v)
+        bad = os.path.join(saves, 'bad.png')
+        tampered.save(bad, 'PNG')
+        refused(bad, label)
+    g['QFileDialog'] = real_dialog
+
     # -- Reset offers to delete the files of the views it throws away (but keeps the opening view's)
     pix_dir = g['PIX_DIR']
     g['on_reset']()
@@ -491,7 +677,7 @@ def drive():
     check('the reset prompt says it is a reset and counts only old views', asked and asked[-1][2] is True and asked[-1][0] == len(old), asked)
     answer_reset('keep')
     g['on_reset']()
-    check('Keep all resets but deletes nothing', len(list(MAP)) == 1 and all(os.path.exists(f) for f in old))
+    check('Keep all (leaving them in pix/) resets but deletes nothing', len(list(MAP)) == 1 and all(os.path.exists(f) for f in old))
     for _ in range(2):
         release(g, 300, 500, 600)
         g['on_run']()
@@ -541,7 +727,7 @@ def drive():
     check('stale reference orbits are swept before asking', not os.path.exists(old_ref))
     answer('keep')
     check('Keep all closes the window', window.close() is True and not window.isVisible())
-    check('Keep all deletes nothing', all(os.path.exists(f) for f in gen))
+    check('Keep all in pix/ itself leaves the files where they are', all(os.path.exists(f) for f in gen))
     window.show()
     answer('delete')
     check('Delete all closes the window', window.close() is True and not window.isVisible())
@@ -553,10 +739,86 @@ def drive():
     asked.clear()
     check('with nothing to delete there is no prompt', window.close() is True and not asked, asked)
 
+    # -- Keep all asks where to keep the files, and moves them there (into a new dated folder, never overwriting)
+    dest = os.path.join(tmp, 'kept')
+    os.makedirs(dest)
+    precious = os.path.join(dest, 'mandapp1.bmp')
+    open(precious, 'wb').write(b'already here')
+    for _ in range(2):
+        release(g, 300, 500, 600)
+        g['on_run']()
+    window.show()
+    mine = g['generated_files'](pix_dir)
+    MAPNOW = g['MAP']
+
+    def item_of(f):
+        item = MAPNOW[g['STARTFILE']] if f == g['START_COPY'] else MAPNOW[f]
+        return item if item is not None and f == g['image_path'](item) else None
+
+    def kept_name(f):
+        """A picture of a view in this session is kept as a PNG; one left from earlier is moved as it was."""
+        return os.path.basename(f)[:-4] + '.png' if item_of(f) else os.path.basename(f)
+    images_before = {os.path.basename(f): QtGui.QImage(f) for f in mine if f.endswith('.bmp')}
+    items_before = {os.path.basename(f): item_of(f) for f in mine if f.endswith('.bmp')}
+    expected_names = sorted(kept_name(f) for f in mine if f.endswith('.bmp'))
+    counts_files = [f for f in mine if not f.endswith('.bmp')]
+    check('there are count files in play', len(counts_files) >= 2, counts_files)
+    check('some pictures are of views in this session', any(items_before.values()), expected_names)
+    answer('keep')
+    asked_where = []
+    g['ask_keep_folder'] = lambda parent: (asked_where.append(parent), None)[1]
+    check('cancelling the folder chooser cancels the quit', window.close() is False and window.isVisible() and
+          all(os.path.exists(f) for f in mine) and len(asked_where) == 1, asked_where)
+    g['ask_keep_folder'] = lambda parent: dest
+    check('choosing a folder lets the quit go ahead', window.close() is True and not window.isVisible())
+    folders = [d for d in os.listdir(dest) if d.startswith('mandelbrot-')]
+    check('the files went into one new dated folder inside it', len(folders) == 1, os.listdir(dest))
+    kept_dir = os.path.join(dest, folders[0])
+    check('the pictures were kept (as PNGs) and the count files were not', sorted(os.listdir(kept_dir)) == expected_names,
+          (sorted(os.listdir(kept_dir)), expected_names))
+    pics_ok, meta_ok = True, True
+    for name, img in images_before.items():
+        item = items_before[name]
+        got = os.path.join(kept_dir, name[:-4] + '.png' if item else name)
+        pics_ok = pics_ok and same_pixels(QtGui.QImage(got), img)
+        if item:
+            view = parse_view(read_png_text(got))
+            meta_ok = meta_ok and (view['x'], view['y'], view['w']) == (Decimal(item.xywd.x), Decimal(item.xywd.y), Decimal(item.xywd.w)) \
+                and view['multiplier'] == g['MULTIPLIERS'][int(item.xywd.d)]
+    check('every kept picture shows the same image as the original', pics_ok)
+    check('every kept PNG describes its view (coordinates and multiplier)', meta_ok)
+    check('no temporary files were left in the kept folder', not [n for n in os.listdir(kept_dir) if n.endswith('.part')])
+    check('they are gone from pix/ (pictures moved, counts deleted)', not g['generated_files'](pix_dir) and not any(os.path.exists(f) for f in mine))
+    check('nothing already in the chosen folder was touched', open(precious, 'rb').read() == b'already here')
+    check('whole.bmp and unrelated files stayed in pix/', all(os.path.exists(f) for f in guard))
+    # the same on Reset (the opening view's files stay, since the reset needs them)
+    window.show()
+    g['on_reset']()
+    for _ in range(2):
+        release(g, 300, 500, 600)
+        g['on_run']()
+    old = g['generated_files'](pix_dir, opening=False)
+    expected_reset = sorted(kept_name(f) for f in old if f.endswith('.bmp'))
+    opening_now = [f for f in g['generated_files'](pix_dir) if f not in old]
+    answer('keep')
+    g['ask_keep_folder'] = lambda parent: None
+    g['on_reset']()
+    check('cancelling the folder chooser cancels the reset', len(list(MAP)) == 3 and all(os.path.exists(f) for f in old), len(list(MAP)))
+    g['ask_keep_folder'] = lambda parent: dest
+    g['on_reset']()
+    folders = sorted(d for d in os.listdir(dest) if d.startswith('mandelbrot-'))
+    check('Keep all on Reset keeps the old views\' pictures as PNGs, drops their counts, and resets', len(folders) == 2 and len(list(MAP)) == 1 and
+          not any(os.path.exists(f) for f in old) and
+          sorted(os.listdir(os.path.join(dest, folders[-1]))) == expected_reset,
+          (folders, len(list(MAP)), sorted(os.listdir(os.path.join(dest, folders[-1])))))
+    check('the opening view\'s files were not moved', all(os.path.exists(f) for f in opening_now), opening_now)
+    g['ask_keep_folder'] = lambda parent: g['PIX_DIR']
+    asked.clear()
+
     # -- the real dialog: its three buttons give the three answers
     g['ask_cleanup'] = real_ask
     window.show()
-    for label, want in (('Keep all', 'keep'), ('Delete all', 'delete'), ('Cancel', 'cancel')):
+    for label, want in (('Keep all\u2026', 'keep'), ('Delete all', 'delete'), ('Cancel', 'cancel')):
         def click(label=label):
             box = QtWidgets.QApplication.activeModalWidget()
             [b for b in box.buttons() if b.text() == label][0].click()

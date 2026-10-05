@@ -1,10 +1,12 @@
 """Which files the GUI generates in pix/, and removing them when they are not wanted any more.
 
-Only names the program itself makes are ever matched, and only inside the directory given; a copy
-saved with Save (anywhere else, under any name) and the shipped whole.bmp are never touched.
+Only names the program itself makes are ever matched, and only inside the directory given. PNG files
+(copies saved with Save, pictures kept by Keep all) are the user's and are never matched, nor is the shipped
+whole.bmp. (The program writes PNGs under a temporary `.part` name and removes it if the write fails.)
 """
 import os
 import re
+import shutil
 import time
 
 # mandapp3.bmp (a render), mandapp3.bmp.nu (its raw counts), mandapp3.c12.bmp (a recolored copy)
@@ -13,7 +15,7 @@ RENDERS = re.compile(r'^(mandapp\d+\.bmp(\.nu|\.new)?|mandapp\d+\.c\d+\.bmp)$') 
 # again straight away after a Reset
 OPENING = re.compile(r'^(whole-start\.bmp(\.new)?|whole\.bmp\.nu|whole\.c\d+\.bmp)$')
 # reference orbits are removed right after each render; one still here was left by a crash
-REFERENCE = re.compile(r'^mandapp\d+\.bmp\.ref$')
+REFERENCE = re.compile(r'^(mandapp\d+\.bmp|whole-start\.bmp)(\.new)?\.ref$')
 STALE_SECONDS = 3600
 
 
@@ -54,6 +56,37 @@ def delete_files(paths):
         except OSError:
             failed += 1
     return failed
+
+
+def split_images(paths):
+    """(images, the rest): only the .bmp pictures are worth keeping; the raw counts (.nu), reference orbits
+    and temporary files can all be made again."""
+    images = [p for p in paths if p.endswith('.bmp')]
+    return images, [p for p in paths if not p.endswith('.bmp')]
+
+
+def new_folder(parent, now=None):
+    """Make a new folder inside `parent`, named for the date and time (and numbered if that name is taken), so
+    nothing already there is overwritten. Returns its path."""
+    stamp = time.strftime('%Y%m%d-%H%M%S', time.localtime(time.time() if now is None else now))
+    folder, n = os.path.join(parent, 'mandelbrot-' + stamp), 1
+    while os.path.exists(folder):
+        n += 1
+        folder = os.path.join(parent, 'mandelbrot-{}-{}'.format(stamp, n))
+    os.makedirs(folder)
+    return folder
+
+
+def move_files(paths, parent, now=None):
+    """Move `paths` into a new folder inside `parent`. Returns (folder, number of files that could not be moved)."""
+    folder = new_folder(parent, now)
+    failed = 0
+    for p in paths:
+        try:
+            shutil.move(p, os.path.join(folder, os.path.basename(p)))
+        except (OSError, shutil.Error):
+            failed += 1
+    return folder, failed
 
 
 def remove_stale_references(directory, now=None):

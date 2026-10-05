@@ -10,7 +10,7 @@ import cleanup
 
 GENERATED = ['mandapp0.bmp', 'mandapp4.bmp.new', 'whole-start.bmp.new', 'mandapp12.bmp', 'mandapp12.bmp.nu', 'mandapp3.c7.bmp', 'mandapp3.c120.bmp',
              'whole-start.bmp', 'whole.bmp.nu', 'whole.c1.bmp', 'whole.c33.bmp']
-KEPT = ['whole.bmp', 'mine.bmp', 'mandapp.bmp', 'mandappX.bmp', 'mandapp1.bmp.bak', 'mandapp1.bmp.nu.old', 'mandapp1.cX.bmp',
+KEPT = ['mandapp3.png', 'whole-start.png', 'mandapp1.bmp.png', 'view.png', 'view.png.part', 'whole.bmp', 'mine.bmp', 'mandapp.bmp', 'mandappX.bmp', 'mandapp1.bmp.bak', 'mandapp1.bmp.nu.old', 'mandapp1.cX.bmp',
         'xmandapp1.bmp', 'mandapp1.bmp~', 'notes.txt', 'mand-gui.ini', 'whole.bmp.nu.keep', 'whole-start.bmp.1']
 
 
@@ -45,9 +45,10 @@ class Cleanup(unittest.TestCase):
         self.assertEqual(len(cleanup.generated_files(self.dir)), len(GENERATED) + 1)
 
     def test_reference_files_are_generated_too(self):
-        self.make('mandapp5.bmp.ref')
-        self.make('other.ref')
-        self.assertEqual(self.names(cleanup.generated_files(self.dir)), ['mandapp5.bmp.ref'])
+        refs = ['mandapp5.bmp.ref', 'mandapp5.bmp.new.ref', 'whole-start.bmp.new.ref']
+        for n in refs + ['other.ref', 'whole.bmp.ref']:
+            self.make(n)
+        self.assertEqual(self.names(cleanup.generated_files(self.dir)), sorted(refs))
 
     def test_directories_and_links_are_not_matched(self):
         os.mkdir(os.path.join(self.dir, 'mandapp1.bmp'))
@@ -91,6 +92,44 @@ class Cleanup(unittest.TestCase):
         self.assertEqual(removed, [old])
         self.assertFalse(os.path.exists(old))
         self.assertTrue(os.path.exists(fresh) and os.path.exists(image))
+
+    def test_move_files_into_a_new_dated_folder(self):
+        paths = [self.make('mandapp1.bmp', b'a' * 5), self.make('mandapp1.bmp.nu', b'b' * 7)]
+        other = self.make('whole.bmp', b'keep')
+        dest = os.path.join(self.dir, 'out')
+        os.mkdir(dest)
+        folder, failed = cleanup.move_files(paths, dest, now=1700000000)
+        self.assertEqual(failed, 0)
+        self.assertEqual(os.path.dirname(folder), dest)
+        self.assertTrue(os.path.basename(folder).startswith('mandelbrot-2023'))
+        self.assertEqual(sorted(os.listdir(folder)), ['mandapp1.bmp', 'mandapp1.bmp.nu'])
+        self.assertEqual(open(os.path.join(folder, 'mandapp1.bmp.nu'), 'rb').read(), b'b' * 7)
+        self.assertFalse(any(os.path.exists(p) for p in paths))
+        self.assertTrue(os.path.exists(other))
+
+    def test_moving_twice_never_overwrites(self):
+        dest = os.path.join(self.dir, 'out')
+        os.mkdir(dest)
+        a = self.make('mandapp1.bmp', b'first')
+        f1, _ = cleanup.move_files([a], dest, now=1700000000)
+        b = self.make('mandapp1.bmp', b'second')
+        f2, _ = cleanup.move_files([b], dest, now=1700000000)      # same second
+        self.assertNotEqual(f1, f2)
+        self.assertEqual(open(os.path.join(f1, 'mandapp1.bmp'), 'rb').read(), b'first')
+        self.assertEqual(open(os.path.join(f2, 'mandapp1.bmp'), 'rb').read(), b'second')
+
+    def test_files_that_cannot_be_moved_are_counted(self):
+        dest = os.path.join(self.dir, 'out')
+        os.mkdir(dest)
+        folder, failed = cleanup.move_files([os.path.join(self.dir, 'mandapp9.bmp')], dest)
+        self.assertEqual(failed, 1)
+
+    def test_only_pictures_are_worth_keeping(self):
+        paths = [os.path.join(self.dir, n) for n in ('mandapp1.bmp', 'mandapp1.bmp.nu', 'mandapp2.c3.bmp', 'whole-start.bmp',
+                                                    'mandapp1.bmp.ref', 'mandapp1.bmp.new', 'whole.bmp.nu')]
+        images, rest = cleanup.split_images(paths)
+        self.assertEqual([os.path.basename(p) for p in images], ['mandapp1.bmp', 'mandapp2.c3.bmp', 'whole-start.bmp'])
+        self.assertEqual([os.path.basename(p) for p in rest], ['mandapp1.bmp.nu', 'mandapp1.bmp.ref', 'mandapp1.bmp.new', 'whole.bmp.nu'])
 
     def test_size_text(self):
         self.assertEqual(cleanup.size_text(500), '500 bytes')

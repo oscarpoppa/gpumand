@@ -17,16 +17,23 @@ Going deeper:
 No GPU? `make mand-cpu colorize` builds a CPU-only renderer with the same arguments and output (needs only `gcc` with OpenMP). Point the GUI at it with `renderer=mand-cpu` in the ini file. It is fast for ordinary and deep views (a couple of seconds even below 1e-300); the slow case is very high iteration multipliers on shallow views, which have no skipping. `OMP_NUM_THREADS` sets the thread count and `MAND_VERBOSE=1` reports which render path was taken.
 
 Iterations: the Iterations dial in the GUI sets how many iterations a render may use (the multiplier times 2000, shown under the dial, up to
-40 billion); the multiplier box beside it picks an exact value. A higher limit fills in black areas of deep views, at the cost of time. The top
+40 billion); the multiplier box beside it picks an exact value. A higher limit fills in black areas of deep views, at the cost of time. If you change the multiplier and press Run without making a new selection, the current view is redrawn in place (its image and counts are replaced, no new history entry or files); a new selection still starts a new view. The top
 of the range is for views where nearly every pixel escapes: any pixel inside the set runs to the full limit, so a view with much of its area
 inside can take hours (the window stays busy until the render finishes).
 
 Keyboard: Enter (or the keypad's Enter) presses Run.
 
+Saving and reopening: Save writes the picture on screen as a PNG that remembers its view: the exact coordinates (every digit), the iteration
+multiplier and the color settings, as PNG text fields (readable with any PNG tool, e.g. `exiftool`). **Open a saved view...** reads those back
+(only `.png` files that really are PNGs, and only ones this program saved; every field is checked) and draws the view again as a new entry in
+the history, with its colors restored, so you can recolor it and keep zooming. Redrawing takes as long as the original render did.
+
 Cleaning up: every render leaves files in `pix/` (`mandappN.bmp`, its `.nu` counts, and the opening view's files). Changing anything in the Colors box
 replaces the view's image in place, so recoloring never adds files (older versions left a `.cN.bmp` copy per change; cleanup still removes those).
 When you quit with any of them present, the program shows how many there are and how much space they take, and asks whether to keep them or
-delete them all (Cancel stays open). Reset asks the same about the views it is about to throw away (not the opening view's own files); Cancel
+delete them all (Cancel stays open). Choosing Keep all opens a folder chooser and keeps the pictures (each becomes a PNG that remembers its view and can be reopened; the raw `.nu` counts are not kept, they are deleted) in a new dated folder (`mandelbrot-YYYYmmdd-HHMMSS`)
+inside the folder you pick, so nothing already there is overwritten; picking `pix/` itself leaves them where they are, and cancelling the chooser
+cancels the quit or reset. Reset asks the same about the views it is about to throw away (not the opening view's own files); Cancel
 there means don't reset. Deleting only removes files the program itself made, by exact name, in `pix/`; copies you saved with Save,
 and the shipped `pix/whole.bmp`, are never touched. Keeping them lets you recolor earlier views without rendering again. Leftover reference
 orbit files (`.ref`, normally deleted right after each render) older than an hour are removed automatically at start-up and on quit.
