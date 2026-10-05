@@ -14,7 +14,8 @@ Reference file format (little-endian): a 16-byte header {uint32 count, int32 ste
 float64 step_mant}, then count pairs of float64 (re, im) for Z_0 .. Z_{count-1}, where
 Z_0 = 0 and Z_{n+1} = Z_n^2 + C. The pixel spacing is step_mant * 2**step_exp (kept
 split so it survives widths below double's ~1e-308 range). The orbit stops after the
-first Z with |Z| > 2 (or after maxiter steps).
+first Z with |Z|^2 > BAILOUT2 (the renderers' escape radius, so pixels that stay close to
+the reference escape in step with it), or after maxiter steps.
 """
 import math
 import os
@@ -40,6 +41,7 @@ def read_define(header, name):
 
 
 ITERATIONS = read_define('iter.h', 'ITERATIONS')
+BAILOUT2 = read_define('iter.h', 'BAILOUT2')
 WIDTH = read_define('aspect.h', 'WIDTH')
 HEIGHT = read_define('aspect.h', 'HEIGHT')
 
@@ -50,6 +52,33 @@ PERTURB_BELOW = Decimal('1e-9')
 def digits_for(w):
     """Decimal digits needed to place a point inside a view of width w."""
     return max(30, -Decimal(w).adjusted() + 30)
+
+
+def abbreviate(value, head=9, tail=7, limit=24):
+    """Short text for a long Decimal that still shows its scale: leading digits, an ellipsis, trailing digits,
+    and the power of ten when the number is not near 1 (e.g. 1.23456789…45678901e-45). Values that fit in
+    `limit` characters are shown whole. The leading digits give the value, the exponent its size, and the
+    trailing digits tell nearby points apart at depth."""
+    d = Decimal(value)
+    whole = str(d).lower()
+    if len(whole) <= limit:
+        return whole
+    sign = '-' if d < 0 else ''
+    digits = ''.join(map(str, d.as_tuple().digits)).rstrip('0') or '0'     # (not normalize(): that rounds to the context)
+    adj = d.adjusted()                       # power of ten of the leading digit
+    if len(digits) > head + tail:
+        lead, trail = digits[:head], '…' + digits[-tail:]
+    else:
+        lead, trail = digits, ''
+    if -4 <= adj <= 3:                       # near 1: plain notation, 0.743643887…1234567
+        if adj >= 0:
+            lead = lead.ljust(adj + 1, '0')
+            text = lead[:adj + 1] + ('.' + lead[adj + 1:] if lead[adj + 1:] or trail else '')
+        else:
+            text = '0.' + '0' * (-adj - 1) + lead
+        return sign + text + trail
+    text = lead[0] + ('.' + lead[1:] if lead[1:] else '')
+    return '{}{}{}e{}{}'.format(sign, text, trail, '-' if adj < 0 else '+', abs(adj))
 
 
 def selection_to_region(x, y, w, pixx, pixy, pixw, pixwid, pixhgt):
@@ -68,8 +97,15 @@ def selection_to_region(x, y, w, pixx, pixy, pixw, pixwid, pixhgt):
                 w * pixw / pixwid)
 
 
+MAX_REFERENCE = (1 << 24) - 1     # longest reference orbit the renderers load (refio.h MAX_REF_POINTS, less the start)
+
+
 def reference_orbit(x, y, w, maxiter):
-    """Orbit of the view's centre, as an array('d') of re, im, re, im, ..."""
+    """Orbit of the view's centre, as an array('d') of re, im, re, im, ...
+
+    The orbit is cut off at MAX_REFERENCE steps however high the iteration limit is: a pixel that outlasts the
+    reference starts over from it (rebasing), so very large limits need no longer orbit."""
+    maxiter = min(maxiter, MAX_REFERENCE)
     x, y, w = Decimal(x), Decimal(y), Decimal(w)
     bits = max(128, int(-w.adjusted() * 3.33) + 192)
     out = array('d', [0.0, 0.0])
@@ -83,7 +119,7 @@ def reference_orbit(x, y, w, maxiter):
             fr, fi = float(zr), float(zi)
             out.append(fr)
             out.append(fi)
-            if fr * fr + fi * fi > 4.0:
+            if fr * fr + fi * fi > BAILOUT2:
                 break
     return out
 

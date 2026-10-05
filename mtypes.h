@@ -7,11 +7,22 @@ typedef struct cstruct {
     double length;
 } Complex;
 
+/* How smooth iteration counts become colors (see colorize.h). */
+typedef struct {
+    char palette[32];
+    int mapping;        /* MAP_HISTOGRAM, MAP_LINEAR or MAP_LOG */
+    double scale;       /* 0 = the mapping's default */
+    double shift;       /* rotates the palette; 1 is a full turn */
+    uint32_t interior;  /* 0x00RRGGBB for pixels that never escape */
+} ColorOpts;
+
 typedef struct {
     Complex lleft;
     char filename[256];
     char refname[256];
+    char nuout[256];    /* optional: also write the raw smooth iteration counts here */
     uint32_t interleave;
+    ColorOpts color;
 } RunStart;
 
 typedef struct {
@@ -19,11 +30,6 @@ typedef struct {
     uint8_t grn;
     uint8_t blu;
 } Pixel;
-
-typedef struct {
-    uint32_t *pall;
-    uint32_t size;
-} ColorInfo;
 
 #pragma pack(push,1)
 

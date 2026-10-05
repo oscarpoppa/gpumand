@@ -12,17 +12,33 @@
  * Note: the tests cover the first case; no test view has yet been found where the |z| < |d|
  * case changes the result, so it is kept as a precaution rather than demonstrated necessary.
  *
- * Return value: the 0-based index of the iteration that escaped (|z| > 2), or
- * `iterations` if the pixel never escaped.
+ * Return value: the 0-based index of the iteration that escaped (|z|^2 > BAILOUT2), or
+ * `iterations` if the pixel never escaped. If nu is not NULL it receives the smooth
+ * (continuous) iteration count of an escaped pixel, or -1 for one that never escaped.
  */
 #include <math.h>
 #include <float.h>
 #include <stdint.h>
+#include "iter.h"
 
 #ifdef __CUDACC__
 #define HD __host__ __device__
 #else
 #define HD
+#endif
+
+/* Continuous iteration count for a pixel that escaped at 0-based iteration idx (so idx+1 updates
+ * had been applied) with |z|^2 = zz > BAILOUT2. It is the same on both sides of an iteration-count
+ * band edge (z_n ~ z_{n-1}^2), so coloring by it has no bands. Never negative. */
+HD static inline double smooth_nu(iter_t idx, double zz) {
+    const double nu = (double)idx + 2.0 - log2(0.5 * log2(zz));
+    return nu > 0.0 ? nu : 0.0;
+}
+
+/* Views whose pixel spacing is below 2^FX_STEP_EXP (~1e-271) leave plain double too little
+ * exponent headroom for the deltas, so renderers switch to the floatexp loop. */
+#ifndef FX_STEP_EXP /* tests override this to exercise the floatexp path cheaply */
+#define FX_STEP_EXP (-900)
 #endif
 
 /* Test hook: called once per loop pass of pert_pixel_dbl with the reference index n, the number
@@ -49,12 +65,13 @@ typedef struct {
 
 /* ---- double-precision perturbation (view widths down to ~1e-250) ------------ */
 
-HD static inline int pert_pixel_dbl(const Cd *ref, int refn, BlaView bv, double ox, double oy,
-                                    double step, int iterations, uint32_t *steps) {
+HD static inline iter_t pert_pixel_dbl(const Cd *ref, int refn, BlaView bv, double ox, double oy,
+                                    double step, iter_t iterations, uint32_t *steps, double *nu) {
     const double dcx = ox * step, dcy = oy * step;
     const int last = refn - 1;
     double dx = 0.0, dy = 0.0;
-    int n = 0, cnt = 0;
+    int n = 0;
+    iter_t cnt = 0;
     uint32_t taken = 0;
     while (cnt < iterations) {
         double ndx, ndy;
@@ -88,8 +105,9 @@ HD static inline int pert_pixel_dbl(const Cd *ref, int refn, BlaView bv, double 
         const double zx = ref[n].x + ndx;
         const double zy = ref[n].y + ndy;
         const double zz = zx * zx + zy * zy;
-        if (zz > 4.0) {
+        if (zz > BAILOUT2) {
             if (steps) *steps = taken;
+            if (nu) *nu = smooth_nu(cnt - 1, zz);
             return cnt - 1;
         }
         if (zz < ndx * ndx + ndy * ndy || n >= last) {
@@ -102,12 +120,14 @@ HD static inline int pert_pixel_dbl(const Cd *ref, int refn, BlaView bv, double 
         }
     }
     if (steps) *steps = taken;
+    if (nu) *nu = -1.0;
     return iterations;
 }
 
 /* ---- "floatexp" perturbation (view widths below ~1e-250) ---------------------
- * d is held as (x + iy) * 2^e with max(|x|,|y|) in [0.5, 1) (or exactly zero), so it
- * keeps going far past the ~1e-308 limit of a double's exponent.
+ * Values past the ~1e-308 limit of a double's exponent are held as Fx: (x + iy) * 2^e with
+ * max(|x|,|y|) in [0.5, 1), or exactly zero. The fast loop below uses Fx only for setup,
+ * rebases and near-zero references; the per-iteration work is plain double arithmetic.
  */
 typedef struct { double x, y; int e; } Fx;
 
@@ -145,34 +165,95 @@ HD static inline int fx_less(Fx a, Fx b) {
     return fmax(fabs(a.x), fabs(a.y)) < fmax(fabs(b.x), fabs(b.y));
 }
 
-/* step = step_mant * 2^step_exp is the pixel spacing; ox, oy are pixel offsets from the centre */
-HD static inline int pert_pixel_fx(const Cd *ref, int refn, double ox, double oy,
-                                   double step_mant, int step_exp, int iterations, uint32_t *steps) {
+/* Below this exponent 2^k is too small to hold in a double, so d^2 (which is scaled by 2^k)
+ * is dropped: it is then below 2^-900 relative to d, far under double's precision. */
+#define FX_SCALE_MIN (-1000)
+
+HD static inline double fx_scale(int k) { return k >= FX_SCALE_MIN ? ldexp(1.0, k) : 0.0; }
+
+/*
+ * Floatexp perturbation, fast form. The offset is d = (ex + i*ey) * 2^k, with (ex, ey) an ordinary
+ * double pair, so the loop is plain double arithmetic; frexp/ldexp are only needed on the rare
+ * events that change k (the offset outgrowing the mantissa, or a rebase).
+ *
+ * In units of 2^k the recurrence d' = 2*Z*d + d^2 + dc reads
+ *     e' = 2*Z*e + 2^k * e^2 + dcs,   with dcs = dc * 2^-k   (kept up to date whenever k changes).
+ * step = step_mant * 2^step_exp is the pixel spacing; ox, oy are pixel offsets from the centre.
+ */
+HD static inline iter_t pert_pixel_fx(const Cd *ref, int refn, double ox, double oy,
+                                   double step_mant, int step_exp, iter_t iterations, uint32_t *steps, double *nu) {
     const Fx dc = fx_norm(ox * step_mant, oy * step_mant, step_exp);
     const int last = refn - 1;
-    Fx d = fx_norm(0.0, 0.0, 0);
-    int n = 0, cnt = 0;
+    double ex = 0.0, ey = 0.0;
+    int k = fx_zero(dc) ? 0 : dc.e;
+    double dcx = dc.x, dcy = dc.y;          /* dc * 2^-k */
+    double sk = fx_scale(k);                /* 2^k, or 0 when it is too small for a double */
+    int n = 0;
+    iter_t cnt = 0;
     uint32_t taken = 0;
     while (cnt < iterations) {
         taken++;
         const double rx = ref[n].x, ry = ref[n].y;
-        const Fx t1 = fx_norm(2.0 * (rx * d.x - ry * d.y), 2.0 * (rx * d.y + ry * d.x), d.e);
-        const Fx t2 = fx_norm(d.x * d.x - d.y * d.y, 2.0 * d.x * d.y, 2 * d.e);
-        const Fx nd = fx_add(fx_add(t1, t2), dc);
+        const double nex = 2.0 * (rx * ex - ry * ey) + sk * (ex * ex - ey * ey) + dcx;
+        const double ney = 2.0 * (rx * ey + ry * ex) + sk * (2.0 * ex * ey) + dcy;
         n++;
         cnt++;
-        const Fx z = fx_add(fx_norm(ref[n].x, ref[n].y, 0), nd);
-        const double zx = ldexp(z.x, z.e), zy = ldexp(z.y, z.e);
-        if (zx * zx + zy * zy > 4.0) {
+        const double zrx = ref[n].x, zry = ref[n].y;
+        const double zx = zrx + nex * sk, zy = zry + ney * sk;
+        const double zz = zx * zx + zy * zy;
+        if (zz > BAILOUT2) {
             if (steps) *steps = taken;
+            if (nu) *nu = smooth_nu(cnt - 1, zz);
             return cnt - 1;
         }
-        if (fx_less(z, nd) || n >= last)
-            d = z, n = 0;
-        else
-            d = nd;
+        /* rebase when the reference runs out, or when |z| < |d| (max-norms) */
+        int rebase = n >= last;
+        const double zmax = fmax(fabs(zrx), fabs(zry));
+        if (!rebase) {
+            if (zmax < 4.909093465297727e-91 /* 2^-300 */) {
+                /* the reference is nearly zero here: compare exactly, in floatexp */
+                const Fx ndf = fx_norm(nex, ney, k);
+                rebase = fx_less(fx_add(fx_norm(zrx, zry, 0), ndf), ndf);
+            } else if (k >= FX_SCALE_MIN) {
+                rebase = fmax(fabs(zx), fabs(zy)) < fmax(fabs(nex), fabs(ney)) * sk;
+            }
+            /* else |d| <= 2^-900 while |Z| >= 2^-300, so |z| < |d| is impossible */
+        }
+        if (rebase) {
+            const Fx z = fx_add(fx_norm(zrx, zry, 0), fx_norm(nex, ney, k));
+            if (fx_zero(z)) {
+                ex = ey = 0.0;
+                k = fx_zero(dc) ? 0 : dc.e;
+                dcx = dc.x;
+                dcy = dc.y;
+            } else {
+                ex = z.x;
+                ey = z.y;
+                k = z.e;
+                dcx = fx_zero(dc) ? 0.0 : ldexp(dc.x, dc.e - k);
+                dcy = fx_zero(dc) ? 0.0 : ldexp(dc.y, dc.e - k);
+            }
+            sk = fx_scale(k);
+            n = 0;
+        } else {
+            ex = nex;
+            ey = ney;
+            const double emax = fmax(fabs(ex), fabs(ey));
+            if (emax > 1.2676506002282294e+30 /* 2^100 */) {
+                /* move the excess into k so e stays near 1 */
+                int m;
+                frexp(emax, &m);
+                ex = ldexp(ex, -m);
+                ey = ldexp(ey, -m);
+                dcx = ldexp(dcx, -m);
+                dcy = ldexp(dcy, -m);
+                k += m;
+                sk = fx_scale(k);
+            }
+        }
     }
     if (steps) *steps = taken;
+    if (nu) *nu = -1.0;
     return iterations;
 }
 
