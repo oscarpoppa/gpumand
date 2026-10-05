@@ -195,6 +195,16 @@ def recolor(item):
     return True
 
 
+def with_restore(box, button):
+    """A spin box with its restore button beside it, for a row of the Colors form."""
+    row = QHBoxLayout()
+    row.setContentsMargins(0, 0, 0, 0)
+    row.setSpacing(4)
+    row.addWidget(box, 1)
+    row.addWidget(button)
+    return row
+
+
 def on_color_change(*_):
     """A color control changed: recolor the view on screen at once (new renders use the settings too)."""
     with WaitCurs():
@@ -743,6 +753,13 @@ if __name__ == '__main__':
     shift_box.setSingleStep(0.05)
     shift_box.setKeyboardTracking(False)
     shift_box.setToolTip('Rotate the palette (1 is a full turn)')
+    # each of Scale and Shift has its own button to put it back how it starts (changing the value recolors, once)
+    restore_scale_btn = QPushButton('Restore')
+    restore_scale_btn.setToolTip("Put Scale back to its default (the mapping's own value)")
+    restore_scale_btn.clicked.connect(lambda: scale_box.setValue(0.0))
+    restore_shift_btn = QPushButton('Restore')
+    restore_shift_btn.setToolTip('Put Shift back to 0')
+    restore_shift_btn.clicked.connect(lambda: shift_box.setValue(0.0))
     for control in (pal_box, map_box):
         control.currentIndexChanged.connect(on_color_change)
     for control in (scale_box, shift_box):
@@ -780,8 +797,8 @@ if __name__ == '__main__':
     color_form = QFormLayout()
     color_form.addRow('Palette:', pal_box)
     color_form.addRow('Mapping:', map_box)
-    color_form.addRow('Scale:', scale_box)
-    color_form.addRow('Shift:', shift_box)
+    color_form.addRow('Scale:', with_restore(scale_box, restore_scale_btn))
+    color_form.addRow('Shift:', with_restore(shift_box, restore_shift_btn))
     color_group = QGroupBox('Colors')
     color_group.setLayout(color_form)
     iter_form = QFormLayout()

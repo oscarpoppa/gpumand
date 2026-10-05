@@ -362,6 +362,33 @@ def drive():
         want = make_expected(nu_file, '--palette=fire', '--mapping=linear', '--shift=0.25')
         check('a scale of 0 means the default', open(g['image_path'](item), 'rb').read() == want)
 
+        # Each Restore button puts its own box back and recolors once, leaving the other settings alone
+        mapping.setCurrentText('linear')
+        pal.setCurrentText('ocean')
+        scale.setValue(40.0)
+        shift.setValue(0.25)
+        recolors = []
+        real_recolor = g['recolor']
+        g['recolor'] = lambda it: (recolors.append(it.fname), real_recolor(it))[1]
+        g['restore_scale_btn'].click()
+        check('Restore beside Scale sets it back to its default and leaves Shift alone',
+              scale.value() == 0.0 and scale.text() == 'default' and shift.value() == 0.25, (scale.value(), scale.text(), shift.value()))
+        check('Restore beside Scale recolors once, with the other settings kept', recolors == [item.fname] and
+              open(g['image_path'](item), 'rb').read() == make_expected(nu_file, '--palette=ocean', '--mapping=linear', '--shift=0.25'), recolors)
+        del recolors[:]
+        scale.setValue(40.0)
+        del recolors[:]
+        g['restore_shift_btn'].click()
+        check('Restore beside Shift sets it to 0 and leaves Scale alone', shift.value() == 0.0 and scale.value() == 40.0, (shift.value(), scale.value()))
+        check('Restore beside Shift recolors once, with the other settings kept', recolors == [item.fname] and
+              open(g['image_path'](item), 'rb').read() == make_expected(nu_file, '--palette=ocean', '--mapping=linear', '--scale=40'), recolors)
+        g['recolor'] = real_recolor
+        check('Restore leaves the palette and mapping alone', (pal.currentText(), mapping.currentText()) == ('ocean', 'linear'))
+        pal.setCurrentText('fire')                  # (back to the settings the next check expects)
+        mapping.setCurrentText('linear')
+        scale.setValue(0.0)
+        shift.setValue(0.25)
+
         # the settings also go to the next render
         release(g, *aim(g))
         g['on_run']()
@@ -549,6 +576,26 @@ def drive():
     g['on_reset']()
 
     # -- Save writes a PNG that remembers the view; Open draws it again
+    g['scale_box'].setValue(12.5)
+    g['shift_box'].setValue(-0.4)
+    g['restore_scale_btn'].click()
+    check('the Restore button beside Scale puts only Scale back', g['scale_box'].value() == 0.0 and g['shift_box'].value() == -0.4,
+          (g['scale_box'].value(), g['shift_box'].value()))
+    g['scale_box'].setValue(12.5)
+    g['restore_shift_btn'].click()
+    check('the Restore button beside Shift puts only Shift back', g['shift_box'].value() == 0.0 and g['scale_box'].value() == 12.5,
+          (g['scale_box'].value(), g['shift_box'].value()))
+    pos_row = lambda name: g[name].mapTo(window, QtCore.QPoint(0, 0))
+    check('each Restore button sits on the same row as its box, to the right of it',
+          abs(pos_row('restore_scale_btn').y() + g['restore_scale_btn'].height() // 2 - pos_row('scale_box').y() - g['scale_box'].height() // 2) <= 3 and
+          abs(pos_row('restore_shift_btn').y() + g['restore_shift_btn'].height() // 2 - pos_row('shift_box').y() - g['shift_box'].height() // 2) <= 3 and
+          pos_row('restore_scale_btn').x() >= pos_row('scale_box').x() + g['scale_box'].width() - 2 and
+          pos_row('restore_shift_btn').x() >= pos_row('shift_box').x() + g['shift_box'].width() - 2 and
+          g['restore_scale_btn'].parent() is g['color_group'] and g['restore_shift_btn'].parent() is g['color_group'],
+          (pos_row('restore_scale_btn'), pos_row('scale_box')))
+    g['restore_scale_btn'].click()
+    g['restore_shift_btn'].click()
+    check('Restore when already at the defaults is harmless', g['scale_box'].value() == 0.0 and g['shift_box'].value() == 0.0)
     saved_png = os.path.join(saves, 'view.png')
     g['on_reset']()
     release(g, 300, 500, 600)

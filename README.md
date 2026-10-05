@@ -1,67 +1,171 @@
 # gpumand
-CUDA/QT Mandelbrot set browser/explorer for CUDA-enabled workstations. Hours of fun -- seriously!
 
-Allows successive/recursive, cursor-based zoom-ins of screen selections, and the ability to save images.
+A Mandelbrot set explorer: drag a box around anything that looks interesting, press Run, and zoom in again, and again, far past the point
+where ordinary floating point gives up. It runs on a CUDA GPU, or on plain CPU cores if you don't have one. Hours of fun -- seriously!
 
-Zoom depth is not limited by double precision: views narrower than 1e-9 are rendered by perturbation theory. `deepzoom.py` computes one arbitrary-precision reference orbit at the centre of the view (needs `gmpy2`), and the GPU iterates each pixel's small offset from it in double. The GUI keeps coordinates as exact `Decimal`s, so repeated zooms never round through a float.
+![The gpumand window: the image fills the screen, the controls sit in one dark column on the right](docs/images/gui.png)
 
-Going deeper:
+## What it does
 
-* **Iteration multiplier** goes up to 20 million (40 billion iterations); deep views need far more iterations than shallow ones. Reference orbits are capped at 16.7M points: a pixel that outlasts the reference starts over from it, so the cap limits accuracy only for pixels that take longer than that to escape.
-* **BLA skipping** (`bla.c`, `pert.h`): bilinear-approximation tables let each pixel skip runs of up to thousands of iterations at once while its offset from the reference is tiny, e.g. ~15x fewer loop steps at width 1e-200. Reference orbits above ~4M points get no table (memory).
-* **Floatexp** (`pert.h`): below a pixel step of ~1e-271 the offsets carry their own exponent, so views past double's ~1e-308 limit render (tested to 1e-1000). The offset is kept as an ordinary double plus a separate exponent, so it costs about the same per iteration as the double path (a 1e-400 view takes ~2.5 s on 8 CPU cores); it does no BLA skipping.
+* **Point-and-zoom.** Drag a rectangle on the picture, press **Run** (or Enter), and that region is drawn full size. Every view you make is
+  kept as a thumbnail, so **Back** and the thumbnails take you anywhere you have been.
+* **Zooms past 1e-1000.** Plain double precision runs out near a view width of 1e-13. Below 1e-9 gpumand switches to *perturbation
+  theory*: it works out one exact reference path with arbitrary-precision numbers, and every pixel only tracks its tiny difference from it.
+  Coordinates are kept as exact decimals all the way, so repeated zooms never round off.
+* **Smooth, pleasing colors.** Nine palettes, three ways of spreading them over the image, and no color banding. Changing a color setting
+  repaints the picture instantly without drawing it again.
+* **Save and reopen.** Saved pictures are PNG files that remember where they came from, so **Open a saved view** brings one back as a
+  live view you can recolor and keep zooming into.
+* **Tidy.** It cleans up after itself and asks before throwing anything away.
 
-![Screenshot from 2023-04-14 13-35-07](https://user-images.githubusercontent.com/69337264/232128593-e9c0c536-9531-4595-b062-1b32749685e2.png)
+![From the whole set to a view 1e-300 wide](docs/images/zoom-journey.png)
 
+*From the whole set to a view 1e-300 wide. For scale, the whole observable universe is only about 10^62 Planck lengths across, and this
+view is 10^300 times smaller than the first picture. All four pictures were drawn by the program itself.*
 
-No GPU? `make cpu` (the same as `make mand-cpu colorize`) builds a CPU-only renderer and the color tool the GUI also uses with the same arguments and output (needs only `gcc` with OpenMP). Point the GUI at it with `renderer=mand-cpu` in the ini file. It is fast for ordinary and deep views (a couple of seconds even below 1e-300); the slow case is very high iteration multipliers on shallow views, which have no skipping. `OMP_NUM_THREADS` sets the thread count and `MAND_VERBOSE=1` reports which render path was taken.
+## Install
 
-Iterations: the Iterations dial in the GUI sets how many iterations a render may use (the multiplier times 2000, shown under the dial, up to
-40 billion); the multiplier box beside it picks an exact value. A higher limit fills in black areas of deep views, at the cost of time. If you change the multiplier and press Run without making a new selection, the current view is redrawn in place (its image and counts are replaced, no new history entry or files); a new selection still starts a new view. The top
-of the range is for views where nearly every pixel escapes: any pixel inside the set runs to the full limit, so a view with much of its area
-inside can take hours (the window stays busy until the render finishes).
+You need Python 3 with PyQt5 and `gmpy2` (`pip install PyQt5 gmpy2`), and one of:
 
-Keyboard: Enter (or the keypad's Enter) presses Run.
+* **No GPU:** `gcc` with OpenMP. This builds the renderer `mand-cpu`.
 
-Saving and reopening: Save writes the picture on screen as a PNG that remembers its view: the exact coordinates (every digit), the iteration
-multiplier and the color settings, as PNG text fields (readable with any PNG tool, e.g. `exiftool`). **Open a saved view...** reads those back
-(only `.png` files that really are PNGs, and only ones this program saved; every field is checked) and draws the view again as a new entry in
-the history, with its colors restored, so you can recolor it and keep zooming. Redrawing takes as long as the original render did.
+      $ git clone https://github.com/oscarpoppa/gpumand.git
+      $ cd gpumand
+      $ make cpu            # builds mand-cpu and colorize
 
-Cleaning up: every render leaves files in `pix/` (`mandappN.bmp`, its `.nu` counts, and the opening view's files). Changing anything in the Colors box
-replaces the view's image in place, so recoloring never adds files (older versions left a `.cN.bmp` copy per change; cleanup still removes those).
-When you quit with any of them present, the program shows how many there are and how much space they take, and asks whether to keep them or
-delete them all (Cancel stays open). Choosing Keep all opens a folder chooser and keeps the pictures (each becomes a PNG that remembers its view and can be reopened; the raw `.nu` counts are not kept, they are deleted) in a new dated folder (`mandelbrot-YYYYmmdd-HHMMSS`)
-inside the folder you pick, so nothing already there is overwritten; picking `pix/` itself leaves them where they are, and cancelling the chooser
-cancels the quit or reset. Reset asks the same about the views it is about to throw away (not the opening view's own files); Cancel
-there means don't reset. If only the opening view's own files are left when you quit (a Reset keeps them), they are removed without asking; they are redrawn at the next start. Deleting only removes files the program itself made, by exact name, in `pix/`; copies you saved with Save,
-and the shipped `pix/whole.bmp`, are never touched. Keeping them lets you recolor earlier views without rendering again. Leftover reference
-orbit files (`.ref`, normally deleted right after each render) older than an hour are removed automatically at start-up and on quit.
+* **NVIDIA GPU:** CUDA's `nvcc`. This builds the renderer `mand`.
 
-Colors: images are colored from a *smooth* iteration count (no visible bands) through one of several palettes
-(`twilight` is the default; `fire`, `ocean`, `aurora`, `ice`, `sunset`, `gray`, `rainbow`, and the original `classic`). The Colors box in the GUI
-changes palette, mapping, scale and shift on the image you are looking at instantly, without rendering again. Mappings: `histogram` (default,
-spreads the colors evenly whatever the depth), `linear` (a fixed number of iterations per color cycle) and `log`. On the command line,
-`mand` and `mand-cpu` accept `--palette=NAME --mapping=histogram|linear|log --scale=N --shift=N --interior=RRGGBB` (anywhere on the line), and
-`--nu-out=FILE` to save the raw smooth counts; `colorize FILE.nu OUT.bmp [options]` recolors saved counts without rendering, and
-`colorize --list-palettes` lists the palettes.
+      $ make                # builds mand (CUDA) and colorize; pass ARCH=sm_XX for your card, e.g. make ARCH=sm_86 (default sm_50)
 
-Install:
+  (`make all cpu` builds both.)
 
-    
-    $ git clone https://github.com/oscarpoppa/gpumand.git
-    
-    $ cd gpumand
-    
-    $ make            # builds mand (CUDA) and colorize; pass ARCH=sm_XX for your GPU, e.g. make ARCH=sm_86 (default sm_50)
+### Required: tell the GUI which renderer to use
 
-    > Update mand-gui.ini, or supply your own (with --ini option) to reflect your install
+The GUI draws pictures by running a separate program, and **you must set `renderer` in `mand-gui.ini` to the one you built**:
 
+* `renderer=mand-cpu` if you built with `make cpu` (no GPU).
+* `renderer=mand` if you built with plain `make` (CUDA GPU).
 
-Test (no GPU needed):
+If `renderer` is missing, the GUI assumes `mand`, so a CPU-only install will fail to render until you set it. The symptom is a
+"Render failed" message: either the program cannot be run (it was never built), or `mand` starts and stops with "no CUDA-capable device". Edit `mand-gui.ini` (or copy it and pass your own with `--ini`). It also says where
+the programs are and where saved pictures go by default:
+
+    [paths]
+    save_dir=/home/you/Pictures      # where Save starts
+    bin_dir=/home/you/gpumand        # the folder with mand-cpu (or mand), colorize and mand-gui.py
+    renderer=mand-cpu                # REQUIRED: mand-cpu (made by `make cpu`) or mand (made by `make`)
+
+The GUI starts either way, but it can only draw with a renderer that has been built, so set this before your first Run.
+
+Run it:
+
+    $ ./mand-gui.py [-i,--ini=your.ini]
+
+## Using it
+
+| Control | What it does |
+|---|---|
+| Drag on the picture | Draws a selection box (always the picture's own shape). Its exact coordinates appear on the right. |
+| **Run** (or **Enter**) | Draws the selection. If you haven't made a new selection, it redraws the current view in place, which is how you apply a new iteration limit. |
+| **Back**, thumbnails | Return to an earlier view. |
+| **Save** | Writes the picture on screen as a PNG (see below). |
+| **Open a saved view...** | Draws a view from a PNG this program saved. |
+| **Reset** | Back to the whole set (it may ask about old files first). |
+| Iterations dial / Multiplier | The most iterations a render may use is 2000 times the multiplier, up to 20 million (40 billion iterations). More iterations fill in black areas of deep views but take longer. |
+| Colors | Palette, mapping, Scale and Shift. Each change repaints at once. The **Restore** buttons put Scale and Shift back to their starting values. |
+
+The picture grows with the window. If the window's shape doesn't match, up to 15% of the picture is trimmed from the edges rather than
+stretching it. The coordinate boxes show long numbers in short form, such as `-0.743643887...6114774` and `1.23456789...8901234e-45`:
+the first digits, the last digits and the power of ten. Hover over a box to see every digit.
+
+### Colors
+
+Colors come from a *smooth* iteration count, so there are no bands. There are nine palettes:
+
+![The same view in each of the nine palettes](docs/images/palettes.png)
+
+and three **mappings** that decide how counts become colors:
+
+![histogram, linear and log mappings of the same view](docs/images/mappings.png)
+
+* `histogram` (the default) spreads the colors evenly over whatever is in the picture, at any depth.
+* `linear` gives a fixed number of iterations per color cycle (Scale sets the number).
+* `log` cycles the colors once per doubling of the iteration count.
+
+**Scale** sets how fast the colors cycle (blank means a good value for the mapping). **Shift** slides every color around the palette
+without changing the pattern; 1 is one full turn, which looks the same as 0.
+
+### Saving, reopening and cleaning up
+
+**Save** writes a PNG that remembers its view: the exact coordinates (every digit), the iteration multiplier, and the color settings, stored
+as ordinary PNG text fields that any PNG tool can read (for example `exiftool`). **Open a saved view...** reads them back, checks every field,
+and draws the view again as a new entry in the history. It only opens `.png` files that really are PNGs and that this program saved. Redrawing
+takes as long as the original render did.
+
+Every render leaves files in `pix/`: the picture, plus a `.nu` file of the raw counts that makes recoloring instant. Changing colors replaces a
+view's picture in place and redrawing a view with a new iteration limit replaces its files, so nothing piles up. When you **quit** or **Reset**
+with generated files around, it asks what to do:
+
+* **Delete all** removes them.
+* **Keep all...** asks for a folder, then keeps each view's picture there as a PNG that remembers its view (inside a new dated folder, so
+  nothing is overwritten). The raw `.nu` counts are not kept. Choose `pix/` itself to leave everything where it is.
+* **Cancel** stays open, or doesn't reset.
+
+Only files the program made, by exact name in `pix/`, are ever deleted. Pictures you saved, kept pictures and the shipped `pix/whole.bmp` are
+never touched. On Reset the opening view's own files are spared (it needs them), and if only those are left when you quit they are removed without
+asking: they are redrawn at the next start.
+
+## Deep zoom, in a little more detail
+
+| Technique | What it does |
+|---|---|
+| **Perturbation** (`deepzoom.py`, `pert.h`) | One arbitrary-precision reference orbit at the view's center (needs `gmpy2`); each pixel iterates only its small offset from it, in ordinary doubles. |
+| **BLA skipping** (`bla.c`, `pert.h`) | Bilinear-approximation tables let a pixel skip runs of up to thousands of iterations at once while its offset is tiny: about 15 times fewer loop steps at width 1e-200. Orbits over about 4 million points get no table (memory). |
+| **Floatexp** (`pert.h`) | Below a pixel step of about 1e-271 the offsets carry their own exponent, so views past double's 1e-308 limit work (tested to 1e-1000). It costs about the same per iteration as the double path: a 1e-400 view takes about 2.5 seconds on 8 CPU cores. |
+| **Rebasing** | When a pixel's path outruns the reference, or its full value becomes smaller than its offset, it restarts relative to the start of the reference. That avoids the usual "glitch" blobs without extra reference orbits. |
+
+Reference orbits are capped at 16.7 million points. A pixel that outlasts the reference starts over from it, so the cap affects only pixels
+that take longer than that to escape. A view with much of its area inside the set is slow at the top of the iteration range, since every
+inside pixel runs to the full limit. It can take hours, and the window stays busy until the render finishes.
+
+## The CPU renderer
+
+`mand-cpu` takes the same arguments and writes the same output as the GPU `mand`, using the same per-pixel code, spread over your cores with
+OpenMP. It is fast for ordinary and deep views, a couple of seconds even below 1e-300. The slow case is a very high multiplier on a shallow
+view, which has nothing to skip. `OMP_NUM_THREADS` sets the thread count, and `MAND_VERBOSE=1` reports which render path was taken (plain,
+perturbation with BLA, or floatexp).
+
+## Command line
+
+    $ mand-cpu X Y WIDTH OUT.bmp MULTIPLIER [REFERENCE_FILE] [options]
+
+`X Y` is the lower-left corner and `WIDTH` the width of the view (decimal text, as many digits as you like). Views narrower than 1e-9 need a
+reference orbit first: `deepzoom.py X Y WIDTH MAXITER FILE` writes one, which you pass as `REFERENCE_FILE`. Options can go anywhere on the line:
+
+    --palette=NAME  --mapping=histogram|linear|log  --scale=N  --shift=N  --interior=RRGGBB
+    --nu-out=FILE        also save the raw smooth counts
+
+`colorize FILE.nu OUT.bmp [options]` recolors saved counts without rendering, and `colorize --list-palettes` lists the palettes.
+
+## Tests
+
+No GPU needed:
 
     $ python3 -m unittest discover -s tests
 
-Run:
-    
-    $ mand-gui.py [-i,--ini=your.ini]
+The suite (over a hundred tests) checks the deep-zoom math against exact arbitrary-precision iteration, the renderers against independent
+re-implementations, the palettes, the PNG metadata reader, the cleanup rules, and the whole GUI, driven headlessly with both a fake and the
+real renderer.
+
+## Files
+
+| | |
+|---|---|
+| `mand-gui.py` | The window. |
+| `mand-main.cu`, `mand-cpu.c` | The GPU and CPU renderers. They share `pert.h` (the per-pixel code), `bla.c`, `colorize.c`, `refio.c`. |
+| `deepzoom.py` | Reference orbits and exact coordinate math. |
+| `colorize-main.c`, `colorize.c` | Palettes, mappings, and the recolor tool. |
+| `meta.py` | The view description stored inside saved PNGs. |
+| `cleanup.py` | Which files the program may remove, and how. |
+| `docs/` | The pictures above. To redraw them: `make cpu`, then run `docs/make_images.py` and `docs/make_screenshot.py` (they need Pillow). |
+| `tests/` | The test suite. |
