@@ -20,9 +20,6 @@ where ordinary floating point gives up. It runs on a CUDA GPU, or on plain CPU c
 
 ![From the whole set to a view 1e-300 wide](docs/images/zoom-journey.png)
 
-*From the whole set to a view 1e-300 wide. For scale, the whole observable universe is only about 10^62 Planck lengths across, and this
-view is 10^300 times smaller than the first picture. All four pictures were drawn by the program itself.*
-
 ## Install
 
 You need Python 3 with PyQt5 and `gmpy2` (`pip install PyQt5 gmpy2`), and one of:
