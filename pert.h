@@ -1,7 +1,7 @@
 #ifndef __PERT_H
 #define __PERT_H
 /*
- * Per-pixel perturbation iteration, shared by the CUDA kernels in mand-main.cu
+ * Per-pixel perturbation iteration, shared by the CUDA kernels in mand-gpu.cu
  * and by the native test harness (tests/pert_cli.c). Plain C so both can use it.
  *
  * ref[0..refn-1] is the reference orbit Z_n of the image centre (Z_0 = 0). A pixel at

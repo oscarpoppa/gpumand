@@ -1,22 +1,25 @@
-# `make` builds the CUDA renderer (mand) and the color tool; `make cpu` is the no-GPU build: the CPU
-# renderer (mand-cpu) and the color tool, which the GUI also uses to recolor images.
+# `make` (or `make gpu`) builds the CUDA renderer (mand-gpu) and the color tool; `make cpu` is the no-GPU
+# build: the CPU renderer (mand-cpu) and the color tool, which the GUI also uses to recolor images.
 # Override for your GPU, e.g.  make ARCH=sm_86   (or override CFLAGS wholesale)
 ARCH ?= sm_50
 CFLAGS = -Xptxas -O3 -Xcompiler -O3 -arch=$(ARCH)
 CC = nvcc
 
-.PHONY: all cpu
-all: mand colorize
+.PHONY: all gpu cpu
+all: mand-gpu colorize
+
+# An NVIDIA GPU and CUDA: everything the GUI needs with renderer=mand-gpu
+gpu: mand-gpu colorize
 
 # No GPU (or no CUDA): everything the GUI needs with renderer=mand-cpu
 cpu: mand-cpu colorize
 
-mand: mand-main.o bmp.o colorize.o get-coords.o bla.o refio.o
-	$(CC) $(CFLAGS) -o mand mand-main.o bmp.o colorize.o get-coords.o bla.o refio.o
-	strip mand
+mand-gpu: mand-gpu.o bmp.o colorize.o get-coords.o bla.o refio.o
+	$(CC) $(CFLAGS) -o mand-gpu mand-gpu.o bmp.o colorize.o get-coords.o bla.o refio.o
+	strip mand-gpu
 
-mand-main.o: mand-main.cu iter.h bmp.h colorize.h mtypes.h get-coords.h aspect.h pert.h bla.h refio.h
-	$(CC) $(CFLAGS) -c mand-main.cu
+mand-gpu.o: mand-gpu.cu iter.h bmp.h colorize.h mtypes.h get-coords.h aspect.h pert.h bla.h refio.h
+	$(CC) $(CFLAGS) -c mand-gpu.cu
 
 get-coords.o: get-coords.c get-coords.h colorize.h mtypes.h
 	$(CC) $(CFLAGS) -c get-coords.c
@@ -33,7 +36,7 @@ colorize.o: colorize.c colorize.h mtypes.h
 bmp.o: bmp.c bmp.h aspect.h mtypes.h
 	$(CC) $(CFLAGS) -c bmp.c
 
-# CPU-only renderer: same arguments and output as mand, no GPU or nvcc needed.
+# CPU-only renderer: same arguments and output as mand-gpu, no GPU or nvcc needed.
 # Build with `make mand-cpu` (threads: OMP_NUM_THREADS). -ffp-contract=off keeps results
 # identical across CPUs regardless of CPUFLAGS.
 CPUCC ?= gcc
@@ -44,10 +47,10 @@ CPUHDR = colorize.h bmp.h get-coords.h bla.h refio.h pert.h mtypes.h iter.h aspe
 mand-cpu: $(CPUSRC) $(CPUHDR)
 	$(CPUCC) $(CPUFLAGS) -std=gnu99 -ffp-contract=off -fopenmp -Wall -Wextra -o mand-cpu $(CPUSRC) -lm
 
-# Recolors saved smooth-iteration-count files (mand --nu-out=FILE) without rendering again.
+# Recolors saved smooth-iteration-count files (mand-gpu --nu-out=FILE) without rendering again.
 colorize: colorize-main.c colorize.c bmp.c $(CPUHDR)
 	$(CPUCC) $(CPUFLAGS) -std=gnu99 -Wall -Wextra -o colorize colorize-main.c colorize.c bmp.c -lm
 
 .PHONY: clean
 clean:
-	rm -f *.o mand mand-cpu colorize
+	rm -f *.o mand-gpu mand-cpu colorize mand      # (mand: what mand-gpu was called before)

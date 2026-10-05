@@ -1,7 +1,7 @@
 *.o
 *.so
 *.bmp
-mand
+mand-gpu
 __pycache__/
 *.ref
 !pix/whole.bmp

@@ -1,4 +1,4 @@
-"""Drives the real mand-gui.py under an offscreen Qt platform, against a fake `mand` binary.
+"""Drives the real mand-gui.py under an offscreen Qt platform, against a fake `mand-gpu` binary.
 
 Run by tests/test_gui.py in a subprocess (Qt wants one QApplication per process):
     QT_QPA_PLATFORM=offscreen python3 tests/gui_driver.py <scratch dir> [--real]
@@ -21,8 +21,8 @@ os.makedirs(os.path.join(tmp, 'pix'), exist_ok=True)
 shutil.copy(os.path.join(ROOT, 'pix', 'whole.bmp'), os.path.join(tmp, 'pix', 'whole.bmp'))
 saves = os.path.join(tmp, 'saves')
 os.makedirs(saves, exist_ok=True)
-log = os.path.join(tmp, 'mand.log')
-fake = os.path.join(tmp, 'mand-cpu' if REAL else 'mand')
+log = os.path.join(tmp, 'mand-gpu.log')
+fake = os.path.join(tmp, 'mand-cpu' if REAL else 'mand-gpu')
 if REAL:
     os.symlink(os.path.join(ROOT, 'mand-cpu'), fake)
     os.symlink(os.path.join(ROOT, 'colorize'), os.path.join(tmp, 'colorize'))
@@ -42,7 +42,7 @@ ini = os.path.join(tmp, 'test.ini')
 with open(ini, 'w') as fp:
     fp.write('[paths]\nsave_dir=%s\nbin_dir=%s\n' % (saves, tmp))
     # a trailing comment on a setting line must not become part of the value
-    fp.write('renderer=%s   ; which program draws the images\n' % ('mand-cpu' if REAL else 'mand'))
+    fp.write('renderer=%s   ; which program draws the images\n' % ('mand-cpu' if REAL else 'mand-gpu'))
 
 sys.path.insert(0, ROOT)
 from meta import parse_view, read_png_text, view_text      # noqa: E402
@@ -201,8 +201,8 @@ def drive():
         check('real renderer produced a proper image', image_ok(MAP.curr.fname), MAP.curr.fname)
     else:
         first = [c.split() for c in calls() if c.strip() and 'mandapp0.bmp' in c][0]    # (the start-up render comes before it)
-        check('mand called with x y w file multiplier', len(first) >= 5 and Decimal(first[0]) == Decimal('-1.75') and Decimal(first[2]) == 2, first)
-        check('mand is told the color settings and where to save the counts',
+        check('mand-gpu called with x y w file multiplier', len(first) >= 5 and Decimal(first[0]) == Decimal('-1.75') and Decimal(first[2]) == 2, first)
+        check('mand-gpu is told the color settings and where to save the counts',
               '--palette=twilight' in first and '--mapping=histogram' in first and any(f.startswith('--nu-out=') for f in first), first)
 
     # -- the dial's choice reaches the renderer and is remembered with the view
@@ -270,7 +270,7 @@ def drive():
         last = calls()
         deep_call = [c for c in last if c.strip() and any(f.endswith('.ref') for f in c.split())]
         check('deep render passes a reference orbit file', len(deep_call) >= 1, last[-3:])
-        check('reference orbit existed when mand ran', 'REF_EXISTED' in last)
+        check('reference orbit existed when mand-gpu ran', 'REF_EXISTED' in last)
         refs = [f for c in deep_call for f in c.split() if f.endswith('.ref')]
         check('reference orbit file is cleaned up afterwards', refs and not any(os.path.exists(r) for r in refs), refs)
     xfull, wfull = exact(g, 'xbox'), exact(g, 'wbox')
@@ -289,7 +289,10 @@ def drive():
     check('the width shows its power of ten', wshown.rsplit('e', 1)[-1].lstrip('+-').isdigit() and
           int(wshown.rsplit('e', 1)[-1]) == Decimal(wfull).adjusted(), (wshown, wfull))
     check('a long coordinate really is abbreviated in its box', '\u2026' in g['xbox'].text(), g['xbox'].text())
-    check('the renderer setting is honoured', g['RENDERER'] == ('mand-cpu' if REAL else 'mand'), g['RENDERER'])
+    check('an older ini saying renderer=mand is read as mand-gpu', g['resolve_renderer']('mand') == 'mand-gpu' and
+          g['resolve_renderer']('mand-gpu') == 'mand-gpu' and g['resolve_renderer']('mand-cpu') == 'mand-cpu' and
+          g['resolve_renderer']('something-else') == 'something-else')
+    check('the renderer setting is honoured', g['RENDERER'] == ('mand-cpu' if REAL else 'mand-gpu'), g['RENDERER'])
 
     # -- Back / thumbnails / Reset
     depth = len(list(MAP))

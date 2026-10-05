@@ -30,29 +30,31 @@ You need Python 3 with PyQt5 and `gmpy2` (`pip install PyQt5 gmpy2`), and one of
       $ cd gpumand
       $ make cpu            # builds mand-cpu and colorize
 
-* **NVIDIA GPU:** CUDA's `nvcc`. This builds the renderer `mand`.
+* **NVIDIA GPU:** CUDA's `nvcc`. This builds the renderer `mand-gpu`.
 
-      $ make                # builds mand (CUDA) and colorize; pass ARCH=sm_XX for your card, e.g. make ARCH=sm_86 (default sm_50)
+      $ make gpu            # builds mand-gpu (CUDA) and colorize; pass ARCH=sm_XX for your card, e.g. make ARCH=sm_86 (default sm_50)
 
-  (`make all cpu` builds both.)
+  (Plain `make` does the same as `make gpu`, and `make all cpu` builds both.)
 
 ### Required: tell the GUI which renderer to use
 
 The GUI draws pictures by running a separate program, and **you must set `renderer` in `mand-gui.ini` to the one you built**:
 
 * `renderer=mand-cpu` if you built with `make cpu` (no GPU).
-* `renderer=mand` if you built with plain `make` (CUDA GPU).
+* `renderer=mand-gpu` if you built with `make gpu` (CUDA GPU).
 
-If `renderer` is missing, the GUI assumes `mand`, so a CPU-only install will fail to render until you set it. The symptom is a
-"Render failed" message: either the program cannot be run (it was never built), or `mand` starts and stops with "no CUDA-capable device". Edit `mand-gui.ini` (or copy it and pass your own with `--ini`). It also says where
+If `renderer` is missing, the GUI assumes `mand-gpu`, so a CPU-only install will fail to render until you set it. The symptom is a
+"Render failed" message: either the program cannot be run (it was never built), or `mand-gpu` starts and stops with "no CUDA-capable device". Edit `mand-gui.ini` (or copy it and pass your own with `--ini`). It also says where
 the programs are and where saved pictures go by default:
 
     [paths]
     save_dir=/home/you/Pictures      # where Save starts
-    bin_dir=/home/you/gpumand        # the folder with mand-cpu (or mand), colorize and mand-gui.py
-    renderer=mand-cpu                # REQUIRED: mand-cpu (made by `make cpu`) or mand (made by `make`)
+    bin_dir=/home/you/gpumand        # the folder with mand-cpu (or mand-gpu), colorize and mand-gui.py
+    renderer=mand-cpu                # REQUIRED: mand-cpu (made by `make cpu`) or mand-gpu (made by `make gpu`)
 
 The GUI starts either way, but it can only draw with a renderer that has been built, so set this before your first Run.
+
+(The GPU renderer used to be called `mand`. An older ini file that says `renderer=mand` still works: it is read as `mand-gpu`. Build it with `make gpu`, which now produces `mand-gpu`.)
 
 Run it:
 
@@ -127,7 +129,7 @@ inside pixel runs to the full limit. It can take hours, and the window stays bus
 
 ## The CPU renderer
 
-`mand-cpu` takes the same arguments and writes the same output as the GPU `mand`, using the same per-pixel code, spread over your cores with
+`mand-cpu` takes the same arguments and writes the same output as the GPU `mand-gpu`, using the same per-pixel code, spread over your cores with
 OpenMP. It is fast for ordinary and deep views, a couple of seconds even below 1e-300. The slow case is a very high multiplier on a shallow
 view, which has nothing to skip. `OMP_NUM_THREADS` sets the thread count, and `MAND_VERBOSE=1` reports which render path was taken (plain,
 perturbation with BLA, or floatexp).
@@ -159,7 +161,7 @@ real renderer.
 | | |
 |---|---|
 | `mand-gui.py` | The window. |
-| `mand-main.cu`, `mand-cpu.c` | The GPU and CPU renderers. They share `pert.h` (the per-pixel code), `bla.c`, `colorize.c`, `refio.c`. |
+| `mand-gpu.cu`, `mand-cpu.c` | The GPU and CPU renderers. They share `pert.h` (the per-pixel code), `bla.c`, `colorize.c`, `refio.c`. |
 | `deepzoom.py` | Reference orbits and exact coordinate math. |
 | `colorize-main.c`, `colorize.c` | Palettes, mappings, and the recolor tool. |
 | `meta.py` | The view description stored inside saved PNGs. |
