@@ -1,11 +1,15 @@
-# `make` builds the CUDA renderer (mand) and the color tool; `make mand-cpu colorize` is the no-GPU build.
+# `make` builds the CUDA renderer (mand) and the color tool; `make cpu` is the no-GPU build: the CPU
+# renderer (mand-cpu) and the color tool, which the GUI also uses to recolor images.
 # Override for your GPU, e.g.  make ARCH=sm_86   (or override CFLAGS wholesale)
 ARCH ?= sm_50
 CFLAGS = -Xptxas -O3 -Xcompiler -O3 -arch=$(ARCH)
 CC = nvcc
 
-.PHONY: all
+.PHONY: all cpu
 all: mand colorize
+
+# No GPU (or no CUDA): everything the GUI needs with renderer=mand-cpu
+cpu: mand-cpu colorize
 
 mand: mand-main.o bmp.o colorize.o get-coords.o bla.o refio.o
 	$(CC) $(CFLAGS) -o mand mand-main.o bmp.o colorize.o get-coords.o bla.o refio.o

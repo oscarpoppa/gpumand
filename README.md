@@ -14,7 +14,7 @@ Going deeper:
 ![Screenshot from 2023-04-14 13-35-07](https://user-images.githubusercontent.com/69337264/232128593-e9c0c536-9531-4595-b062-1b32749685e2.png)
 
 
-No GPU? `make mand-cpu colorize` builds a CPU-only renderer with the same arguments and output (needs only `gcc` with OpenMP). Point the GUI at it with `renderer=mand-cpu` in the ini file. It is fast for ordinary and deep views (a couple of seconds even below 1e-300); the slow case is very high iteration multipliers on shallow views, which have no skipping. `OMP_NUM_THREADS` sets the thread count and `MAND_VERBOSE=1` reports which render path was taken.
+No GPU? `make cpu` (the same as `make mand-cpu colorize`) builds a CPU-only renderer and the color tool the GUI also uses with the same arguments and output (needs only `gcc` with OpenMP). Point the GUI at it with `renderer=mand-cpu` in the ini file. It is fast for ordinary and deep views (a couple of seconds even below 1e-300); the slow case is very high iteration multipliers on shallow views, which have no skipping. `OMP_NUM_THREADS` sets the thread count and `MAND_VERBOSE=1` reports which render path was taken.
 
 Iterations: the Iterations dial in the GUI sets how many iterations a render may use (the multiplier times 2000, shown under the dial, up to
 40 billion); the multiplier box beside it picks an exact value. A higher limit fills in black areas of deep views, at the cost of time. If you change the multiplier and press Run without making a new selection, the current view is redrawn in place (its image and counts are replaced, no new history entry or files); a new selection still starts a new view. The top
