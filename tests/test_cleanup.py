@@ -131,6 +131,23 @@ class Cleanup(unittest.TestCase):
         self.assertEqual([os.path.basename(p) for p in images], ['mandapp1.bmp', 'mandapp2.c3.bmp', 'whole-start.bmp'])
         self.assertEqual([os.path.basename(p) for p in rest], ['mandapp1.bmp.nu', 'mandapp1.bmp.ref', 'mandapp1.bmp.new', 'whole.bmp.nu'])
 
+    def test_view_files_are_that_view_only(self):
+        mine = ['mandapp1.bmp', 'mandapp1.bmp.nu', 'mandapp1.bmp.new', 'mandapp1.bmp.nu.new', 'mandapp1.bmp.ref',
+                'mandapp1.bmp.new.ref', 'mandapp1.c3.bmp', 'mandapp1.c12.bmp']
+        others = ['mandapp10.bmp', 'mandapp10.bmp.nu', 'mandapp11.c1.bmp', 'mandapp2.bmp', 'mandapp2.bmp.nu', 'whole-start.bmp',
+                  'whole.bmp', 'whole.bmp.nu', 'mandapp1.png', 'mandapp1x.bmp', 'mandapp1.bmp.bak', 'mandapp1.cx.bmp', 'xmandapp1.bmp']
+        for n in mine + others:
+            self.make(n)
+        got = cleanup.view_files(self.dir, os.path.join(self.dir, 'mandapp1.bmp'))
+        self.assertEqual(self.names(got), sorted(mine))
+        self.assertEqual(self.names(cleanup.view_files(self.dir, 'mandapp10.bmp')), ['mandapp10.bmp', 'mandapp10.bmp.nu'])
+
+    def test_view_files_refuses_other_names(self):
+        self.make('whole.bmp')
+        self.make('whole-start.bmp')
+        for name in ('whole.bmp', 'whole-start.bmp', 'mandapp.bmp', 'mandappX.bmp', 'mandapp1.png', '../mandapp1.bmp.nu', ''):
+            self.assertEqual(cleanup.view_files(self.dir, name), [], name)
+
     def test_size_text(self):
         self.assertEqual(cleanup.size_text(500), '500 bytes')
         self.assertEqual(cleanup.size_text(2048), '2.0 KB')

@@ -64,7 +64,7 @@ Run it:
 |---|---|
 | Drag on the picture | Draws a selection box (always the picture's own shape). Its exact coordinates appear on the right. |
 | **Run** (or **Enter**) | Draws the selection. If you haven't made a new selection, it redraws the current view in place, which is how you apply a new iteration limit. |
-| **Back**, thumbnails | Return to an earlier view. |
+| **Back**, thumbnails | Return to an earlier view. The selected thumbnail has a tiny **×** in its corner: it deletes that view and all of its files (after asking), and shows the view before it. Views that were zoomed from the deleted one now hang from its parent, so **Back** always goes to the next real view back. The opening view has no ×. |
 | **Save** | Writes the picture on screen as a PNG (see below). |
 | **Open a saved view...** | Draws a view from a PNG this program saved. |
 | **Reset** | Back to the whole set (it may ask about old files first). |
@@ -108,7 +108,7 @@ with generated files around, it asks what to do:
   nothing is overwritten). The raw `.nu` counts are not kept. Choose `pix/` itself to leave everything where it is.
 * **Cancel** stays open, or doesn't reset.
 
-Only files the program made, by exact name in `pix/`, are ever deleted. Pictures you saved, kept pictures and the shipped `pix/whole.bmp` are
+The × on a thumbnail deletes just that view's files (its picture, counts and any leftovers, matched by exact name). Only files the program made, by exact name in `pix/`, are ever deleted. Pictures you saved, kept pictures and the shipped `pix/whole.bmp` are
 never touched. On Reset the opening view's own files are spared (it needs them), and if only those are left when you quit they are removed without
 asking: they are redrawn at the next start.
 

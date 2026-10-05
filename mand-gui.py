@@ -12,7 +12,7 @@ from math import ceil
 from configparser import ConfigParser
 from optparse import OptionParser
 from decimal import Decimal
-from cleanup import delete_files, generated_files, move_files, new_folder, split_images, remove_stale_references, size_text, total_size
+from cleanup import delete_files, generated_files, move_files, new_folder, split_images, view_files, remove_stale_references, size_text, total_size
 from meta import parse_view, read_png_text, view_text
 from deepzoom import abbreviate, ITERATIONS, WIDTH, HEIGHT, PERTURB_BELOW, selection_to_region, write_reference
 
@@ -73,6 +73,8 @@ QScrollArea { border: none; }
 QScrollBar:vertical { background: #2d2d2d; width: 12px; }
 QScrollBar::handle:vertical { background: #666; border-radius: 5px; min-height: 24px; }
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
+QPushButton#thumbclose { padding: 0; background-color: rgba(0, 0, 0, 170); border: 1px solid #999; border-radius: 9px; color: #eee; font-weight: bold; }
+QPushButton#thumbclose:hover { background-color: #b03a3a; border-color: #eee; }
 QToolTip { background-color: #3c3c3c; color: #dcdcdc; border: 1px solid #666; }
 """
 
@@ -314,8 +316,25 @@ def ensure_start_image():
         recolor(INITPG)
 
 
+class Thumb(QPushButton):
+    """A history thumbnail. Its tiny x (shown only while it is the selected one) deletes the view and its files."""
+
+    def __init__(self):
+        QPushButton.__init__(self)
+        self.closer = QPushButton('\u00d7', self)
+        self.closer.setObjectName('thumbclose')
+        self.closer.setFixedSize(18, 18)
+        self.closer.setToolTip('Delete this view and its files')
+        self.closer.hide()
+
+    def resizeEvent(self, event):
+        QPushButton.resizeEvent(self, event)
+        self.closer.move(self.width() - self.closer.width() - 4, 4)
+
+
 def get_tnail(fname):
-    button = QPushButton()
+    button = Thumb()
+    button.closer.clicked.connect(lambda: on_delete_view(fname))
     button.setIcon(QIcon(fname))
     button.setIconSize(QSize(TN_WID,TN_HGT))
     button.clicked.connect(on_tnclick(fname))
@@ -356,6 +375,16 @@ class MTree(object):
             self._current = new
         return new
 
+    def delete(self, pg):
+        """Drop a view from the history. Views that were zoomed from it now hang from its parent, so Back still works.
+        Returns the view to show instead (its parent)."""
+        for name, child in list(self._map.items()):
+            if child.parent == pg.fname:
+                self._map[name] = child._replace(parent=pg.parent)
+        del self._map[pg.fname]
+        self._current = self._map[pg.parent]
+        return self._current
+
     def set(self, pg):
         if pg.fname in self._map:
             self._current = self._map[pg.fname]
@@ -373,8 +402,10 @@ class MTree(object):
 
     @property
     def back(self):
+        """The view this one was zoomed from. Deleting a view hangs its children from its parent, so this is
+        always the next real view back; a parent that somehow no longer exists falls back to the opening view."""
         if self._current.parent:
-            self._current = self._map[self._current.parent]
+            self._current = self._map.get(self._current.parent) or self._map[INITPG.fname]
         return self._current
 
     @property
@@ -525,8 +556,44 @@ def fset(item):
     reg.setPixmap(load_pixmap(image_path(item)))
     for mem in MAP:
         mem.icon.setFlat(True)
+        mem.icon.closer.hide()
     item.icon.setFlat(False)
+    item.icon.closer.setVisible(item.parent is not None)      # (the opening view cannot be deleted)
     MAP.set(item)
+
+
+def confirm_delete(parent, count, size):
+    """Ask before deleting a view's files for good."""
+    box = QMessageBox(QMessageBox.Question, 'Delete this view?',
+                      'Delete this view and its {} files ({})?\n\nThis cannot be undone. Pictures you saved with Save are not touched.'.format(
+                          count, size_text(size)), QMessageBox.NoButton, parent)
+    delete = box.addButton('Delete', QMessageBox.DestructiveRole)
+    cancel = box.addButton('Cancel', QMessageBox.RejectRole)
+    box.setDefaultButton(cancel)
+    box.setEscapeButton(cancel)
+    box.exec_()
+    return box.clickedButton() is delete
+
+
+def on_delete_view(fname):
+    """The x on the selected thumbnail: delete that view, its files and its thumbnail, and show its parent."""
+    item = MAP[fname]
+    if item is None or item.parent is None:         # the opening view stays
+        return
+    files = view_files(os.path.dirname(item.fname), item.fname)
+    if not confirm_delete(window, len(files), total_size(files)):
+        return
+    with WaitCurs():
+        failed = delete_files(files)
+        parent = MAP.delete(item)
+        scr_layout.removeWidget(item.icon)
+        item.icon.setParent(None)
+        item.icon.deleteLater()
+        SHOWN.pop(item.fname, None)
+        VIEW_COLORS.pop(item.fname, None)
+        fset(parent)
+    if failed:
+        QMessageBox.warning(window, 'Delete view', '{} files could not be deleted.'.format(failed))
 
 
 @pyqtSlot()
