@@ -38,7 +38,7 @@ You need Python 3 with PyQt5 and `gmpy2` (`pip install PyQt5 gmpy2`), and one of
 
 ### Required: tell the GUI which renderer to use
 
-The GUI draws pictures by running a separate program, and **you must set `renderer` in `mand-gui.ini` to the one you built**:
+The GUI draws pictures by running a separate program (the GUI starts it; you never run it yourself), and **you must set `renderer` in `mand-gui.ini` to the one you built**:
 
 * `renderer=mand-cpu` if you built with `make cpu` (no GPU).
 * `renderer=mand-gpu` if you built with `make gpu` (CUDA GPU).
@@ -127,22 +127,10 @@ inside pixel runs to the full limit. It can take hours, and the window stays bus
 
 ## The CPU renderer
 
-`mand-cpu` takes the same arguments and writes the same output as the GPU `mand-gpu`, using the same per-pixel code, spread over your cores with
-OpenMP. It is fast for ordinary and deep views, a couple of seconds even below 1e-300. The slow case is a very high multiplier on a shallow
-view, which has nothing to skip. `OMP_NUM_THREADS` sets the thread count, and `MAND_VERBOSE=1` reports which render path was taken (plain,
-perturbation with BLA, or floatexp).
-
-## Command line
-
-    $ mand-cpu X Y WIDTH OUT.bmp MULTIPLIER [REFERENCE_FILE] [options]
-
-`X Y` is the lower-left corner and `WIDTH` the width of the view (decimal text, as many digits as you like). Views narrower than 1e-9 need a
-reference orbit first: `deepzoom.py X Y WIDTH MAXITER FILE` writes one, which you pass as `REFERENCE_FILE`. Options can go anywhere on the line:
-
-    --palette=NAME  --mapping=histogram|linear|log  --scale=N  --shift=N  --interior=RRGGBB
-    --nu-out=FILE        also save the raw smooth counts
-
-`colorize FILE.nu OUT.bmp [options]` recolors saved counts without rendering, and `colorize --list-palettes` lists the palettes.
+`mand-cpu` is the renderer the GUI runs when you have no GPU (`renderer=mand-cpu`). It uses the same per-pixel code as `mand-gpu`, spread
+over your CPU cores with OpenMP. It is fast for ordinary and deep views, a couple of seconds even below 1e-300. The slow case is a very high
+multiplier on a shallow view, which has nothing to skip. To limit how many cores it uses, set `OMP_NUM_THREADS` before starting the GUI, for
+example `OMP_NUM_THREADS=4 ./mand-gui.py`.
 
 ## Tests
 
