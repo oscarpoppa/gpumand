@@ -259,31 +259,24 @@ HD static inline iter_t pert_pixel_fx(const Cd *ref, int refn, double ox, double
 
 
 /* ======================== z^d + c (whole d, POWER_MIN_DEGREE .. POWER_MAX_DEGREE) =======================
- * The same three paths as above for the map z -> z^d + c. With z = Z + d the perturbation recurrence is
- *     d' = (Z + d)^p - Z^p + dc = d * q(Z, d) + dc,      q(Z, y) = sum_{m=0}^{p-1} C(p, m+1) Z^(p-1-m) y^m
- * (written with the exponent p to keep it apart from the offset d). It has no cancelling terms: the
- * Z^p that the plain map would subtract away never appears. q is evaluated by Horner's rule in y.
+ * The same three paths as above for the map z -> z^d + c. With z = Z + d (p is the exponent, to keep it
+ * apart from the offset d) the perturbation recurrence is
+ *     d' = z^p - Z^p + dc = d * q + dc,      q = (z^p - Z^p) / (z - Z) = sum_{k=0}^{p-1} z^k Z^(p-1-k).
+ * The sum has no cancelling subtraction: for a small d every term is about Z^(p-1) and q = p Z^(p-1). It is
+ * built in p-1 steps of two complex multiplications with no table and no array, which suits a GPU thread.
+ * (tests/pow_cli.c checks it against the binomial expansion of the same difference, and against exact
+ * arithmetic.)
  */
 
 typedef struct {
     int d;                                  /* the exponent */
     double logd;                            /* ln d, for the smooth iteration count */
-    double binom[POWER_MAX_DEGREE + 1];     /* binom[j] = C(d, j) */
 } Pow;
 
-/* Host-side setup. Pascal's triangle in exact integers (C(64, 32) < 2^63), then one rounding to double. */
+/* Host-side setup. */
 static inline void pow_init(Pow *p, int d) {
-    unsigned long long row[POWER_MAX_DEGREE + 1];
-    for (int j = 0; j <= POWER_MAX_DEGREE; j++)
-        row[j] = 0;
-    row[0] = 1;
-    for (int i = 1; i <= d; i++)
-        for (int j = i; j >= 1; j--)
-            row[j] += row[j - 1];
     p->d = d;
     p->logd = log((double)d);
-    for (int j = 0; j <= POWER_MAX_DEGREE; j++)
-        p->binom[j] = (double)row[j];
 }
 
 /* (zx + i zy)^d by repeated squaring, d >= 1 */
@@ -314,25 +307,22 @@ HD static inline double smooth_nu_pow(iter_t idx, double zz, double logd) {
     return nu > 0.0 ? nu : 0.0;
 }
 
-/* q(Z, y), see above; (Z + d)^p - Z^p = d * q(Z, d) */
+/* q for the reference value Z and the offset y: (Z + y)^p - Z^p = y * q. Built as S_m = S_(m-1) Z + z^m. */
 HD static inline void pow_q(const Pow *p, double zx, double zy, double yx, double yy, double *qx, double *qy) {
-    double px[POWER_MAX_DEGREE], py[POWER_MAX_DEGREE];      /* Z^0 .. Z^(p-1) */
-    const int d = p->d;
-    px[0] = 1.0;
-    py[0] = 0.0;
-    for (int k = 1; k < d; k++) {
-        px[k] = px[k - 1] * zx - py[k - 1] * zy;
-        py[k] = px[k - 1] * zy + py[k - 1] * zx;
+    const double wx = zx + yx, wy = zy + yy;                /* z = Z + y */
+    double sx = 1.0, sy = 0.0;                              /* S_0 = 1 */
+    double ux = 1.0, uy = 0.0;                              /* z^m */
+    for (int m = 1; m < p->d; m++) {
+        const double t = ux * wx - uy * wy;
+        uy = ux * wy + uy * wx;
+        ux = t;
+        const double s = sx * zx - sy * zy;
+        sy = sx * zy + sy * zx;
+        sx = s + ux;
+        sy += uy;
     }
-    double ax = 1.0, ay = 0.0;                              /* m = p-1: C(p, p) Z^0 */
-    for (int m = d - 2; m >= 0; m--) {
-        const double tx = ax * yx - ay * yy, ty = ax * yy + ay * yx;
-        const double c = p->binom[m + 1];
-        ax = c * px[d - 1 - m] + tx;
-        ay = c * py[d - 1 - m] + ty;
-    }
-    *qx = ax;
-    *qy = ay;
+    *qx = sx;
+    *qy = sy;
 }
 
 /* Double-precision perturbation, as pert_pixel_dbl; the BLA table must come from bla_build_pow. */
@@ -398,7 +388,7 @@ HD static inline iter_t pert_pixel_dbl_pow(const Cd *ref, int refn, BlaView bv, 
 
 /* Floatexp perturbation, as pert_pixel_fx. In units of 2^k, with y = e * 2^k,
  *     e' = e * q(Z, y) + dcs,
- * and when 2^k is too small for a double (y = 0) only the linear term p Z^(p-1) e is left. */
+ * and when 2^k is too small for a double (y = 0, so z = Z) only the linear term p Z^(p-1) e is left. */
 HD static inline iter_t pert_pixel_fx_pow(const Cd *ref, int refn, const Pow *pw, double ox, double oy,
                                           double step_mant, int step_exp, iter_t iterations, uint32_t *steps, double *nu) {
     const Fx dc = fx_norm(ox * step_mant, oy * step_mant, step_exp);

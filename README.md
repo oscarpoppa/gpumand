@@ -162,6 +162,14 @@ The suite (over a hundred tests) checks the deep-zoom math against exact arbitra
 re-implementations, the palettes, the PNG metadata reader, the cleanup rules, and the whole GUI, driven headlessly with both a fake and the
 real renderer.
 
+The GPU renderer shares its per-pixel code with the CPU renderer, so most of what it does is tested here. To check the GPU itself, run
+this on a machine with an NVIDIA GPU (after `make gpu cpu`):
+
+    $ python3 tests/compare_gpu_cpu.py
+
+It draws a set of views with both renderers and reports how many pixels differ (a few chaotic pixels can, because the GPU rounds slightly
+differently).
+
 ## Files
 
 | | |
@@ -169,9 +177,9 @@ real renderer.
 | `mand-gui.py` | The window. |
 | `mand-gpu.cu`, `mand-cpu.c` | The GPU and CPU renderers. They share `pert.h` (the per-pixel code), `bla.c`, `colorize.c`, `refio.c`, `funcspec.c`. |
 | `deepzoom.py` | Reference orbits and exact coordinate math. |
-| `funcspec.c`, `funcspec.h`, `funcspec.py` | The small file that tells a renderer which function to draw (`--func=FILE`); so far z^d + c for whole d from 2 to 64, in `mand-cpu` only. |
+| `funcspec.c`, `funcspec.h`, `funcspec.py` | The small file that tells a renderer which function to draw (`--func=FILE`); so far z^d + c for whole d from 2 to 64, in both renderers. |
 | `colorize-main.c`, `colorize.c` | Palettes, mappings, and the recolor tool. |
 | `meta.py` | The view description stored inside saved PNGs. |
 | `cleanup.py` | Which files the program may remove, and how. |
 | `docs/` | The pictures above. To redraw them: `make cpu`, then run `docs/make_images.py` and `docs/make_screenshot.py` (they need Pillow). |
-| `tests/` | The test suite. |
+| `tests/` | The test suite, and `compare_gpu_cpu.py` for checking the GPU renderer on a machine that has a GPU. |

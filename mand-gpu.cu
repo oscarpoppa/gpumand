@@ -69,6 +69,40 @@ __global__ void MandKernPertFx(const Cd* ref, const int refn, const double step_
     pert_pixel_fx(ref, refn, pix_x - WIDTH / 2, pix_y - HEIGHT / 2, step_mant, step_exp, iterations, NULL, &dev_nu_ptr[WIDTH*pix_y+pix_x]);
 }
 
+// The same three kernels for z^d + c (--func=FILE, see funcspec.h), calling the shared code in pert.h that the
+// CPU renderer and the tests also run. `pw` is passed by value: it is two numbers.
+__global__ void MandKernPow(double* dev_nu_ptr, const Init* dev_init_ptr, const Pow pw) {
+    iter_t cnt = 0;
+    const iter_t iterations = (iter_t)ITERATIONS * dev_init_ptr->ilev;
+    const int pix_x = blockIdx.x * blockDim.x + threadIdx.x;
+    const int pix_y = blockIdx.y * blockDim.y + threadIdx.y;
+    const double cx = dev_init_ptr->llft.x + dev_init_ptr->ledg * (double)pix_x / WIDTH;
+    const double cy = dev_init_ptr->llft.y + dev_init_ptr->ledg * (double)pix_y / WIDTH;
+    double zx = 0.0, zy = 0.0, zz = 0.0;
+    for (; cnt<iterations; cnt++) {
+        double px, py;
+        cpow_int(zx, zy, pw.d, &px, &py);
+        zx = px + cx;
+        zy = py + cy;
+        zz = zx * zx + zy * zy;
+        if (zz > BAILOUT2)
+            break;
+    }
+    dev_nu_ptr[WIDTH*pix_y+pix_x] = cnt == iterations ? -1.0 : smooth_nu_pow(cnt, zz, pw.logd);
+}
+
+__global__ void MandKernPertPow(const Cd* ref, const int refn, const BlaView bv, const Pow pw, const double step, double* dev_nu_ptr, const iter_t iterations) {
+    const int pix_x = blockIdx.x * blockDim.x + threadIdx.x;
+    const int pix_y = blockIdx.y * blockDim.y + threadIdx.y;
+    pert_pixel_dbl_pow(ref, refn, bv, &pw, pix_x - WIDTH / 2, pix_y - HEIGHT / 2, step, iterations, NULL, &dev_nu_ptr[WIDTH*pix_y+pix_x]);
+}
+
+__global__ void MandKernPertFxPow(const Cd* ref, const int refn, const Pow pw, const double step_mant, const int step_exp, double* dev_nu_ptr, const iter_t iterations) {
+    const int pix_x = blockIdx.x * blockDim.x + threadIdx.x;
+    const int pix_y = blockIdx.y * blockDim.y + threadIdx.y;
+    pert_pixel_fx_pow(ref, refn, &pw, pix_x - WIDTH / 2, pix_y - HEIGHT / 2, step_mant, step_exp, iterations, NULL, &dev_nu_ptr[WIDTH*pix_y+pix_x]);
+}
+
 int main(int argc, char **argv) {
     Init istruct, *dev_init_ptr;
     double *dev_nu_ptr;
@@ -76,11 +110,10 @@ int main(int argc, char **argv) {
     Bla *blahost = NULL, *dev_bla_ptr = NULL;
     RefHeader rh;
     RunStart *init = get_coords(argc, argv);
-    if (init->func.kind != FUNC_MANDELBROT) {
-        /* drawing other functions needs kernels that are not written yet: say so rather than draw z^2 */
-        fprintf(stderr, "mand-gpu: --func is not supported by the GPU renderer yet (use mand-cpu)\n");
-        return 1;
-    }
+    const int power = init->func.kind == FUNC_POWER;
+    Pow pw;
+    if (power)
+        pow_init(&pw, init->func.degree);
     istruct.llft.x = init->lleft.real;
     istruct.llft.y = init->lleft.imag;
     istruct.ledg = init->lleft.length;
@@ -99,14 +132,19 @@ int main(int argc, char **argv) {
         CUDA_CHECK(cudaMalloc(&dev_ref_ptr, rh.count*sizeof(Cd)));
         CUDA_CHECK(cudaMemcpy(dev_ref_ptr, refhost, rh.count*sizeof(Cd), cudaMemcpyHostToDevice));
         if (rh.step_exp < FX_STEP_EXP) {
-            MandKernPertFx<<<dimGrid, dimBlock>>>(dev_ref_ptr, refn, rh.step_mant, rh.step_exp, dev_nu_ptr, iterations);
+            if (power)
+                MandKernPertFxPow<<<dimGrid, dimBlock>>>(dev_ref_ptr, refn, pw, rh.step_mant, rh.step_exp, dev_nu_ptr, iterations);
+            else
+                MandKernPertFx<<<dimGrid, dimBlock>>>(dev_ref_ptr, refn, rh.step_mant, rh.step_exp, dev_nu_ptr, iterations);
         } else {
             const double step = ldexp(rh.step_mant, rh.step_exp);
             BlaView bv;
             bv.nlev = 0;
             bv.tab = NULL;
             if (refn <= BLA_MAX_REF) {
-                if (bla_build(refhost, refn, BLA_EPS, step * hypot(WIDTH / 2.0, HEIGHT / 2.0) * 1.01, &bv, &blahost)) {
+                const double dcmax = step * hypot(WIDTH / 2.0, HEIGHT / 2.0) * 1.01;
+                if (power ? bla_build_pow(refhost, refn, BLA_EPS, dcmax, pw.d, &bv, &blahost)
+                          : bla_build(refhost, refn, BLA_EPS, dcmax, &bv, &blahost)) {
                     fprintf(stderr, "Out of memory building the BLA table\n");
                     exit(1);
                 }
@@ -117,10 +155,16 @@ int main(int argc, char **argv) {
                     bv.tab = dev_bla_ptr;
                 }
             }
-            MandKernPert<<<dimGrid, dimBlock>>>(dev_ref_ptr, refn, bv, step, dev_nu_ptr, iterations);
+            if (power)
+                MandKernPertPow<<<dimGrid, dimBlock>>>(dev_ref_ptr, refn, bv, pw, step, dev_nu_ptr, iterations);
+            else
+                MandKernPert<<<dimGrid, dimBlock>>>(dev_ref_ptr, refn, bv, step, dev_nu_ptr, iterations);
         }
     } else {
-        MandKern<<<dimGrid, dimBlock>>>(dev_nu_ptr, dev_init_ptr);
+        if (power)
+            MandKernPow<<<dimGrid, dimBlock>>>(dev_nu_ptr, dev_init_ptr, pw);
+        else
+            MandKern<<<dimGrid, dimBlock>>>(dev_nu_ptr, dev_init_ptr);
     }
     CUDA_CHECK(cudaGetLastError());
     double *nu = (double*)malloc((size_t)HEIGHT*WIDTH*sizeof(double));

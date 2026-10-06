@@ -212,18 +212,37 @@ class FuncFiles(unittest.TestCase):
             self.assertTrue(os.path.exists(out))
             os.remove(out)
 
-    @unittest.skipUnless(os.path.exists(os.path.join(ROOT, 'mand-gpu')), 'mand-gpu is not built')
-    def test_the_gpu_renderer_refuses_rather_than_draw_the_wrong_function(self):
-        gpu = os.path.join(ROOT, 'mand-gpu')
-        if os.path.getmtime(gpu) < max(os.path.getmtime(os.path.join(ROOT, f)) for f in ('mand-gpu.cu', 'pert.h', 'get-coords.c', 'funcspec.c')):
-            self.skipTest('mand-gpu is older than its sources: run make gpu')
-        spec = self.write(funcspec.power_spec_text(3))
-        out = os.path.join(self.tmp, 'g.bmp')
-        # (the refusal comes before any CUDA call, so it shows on a machine without a GPU too)
-        res = subprocess.run([gpu, '-1.2', '-0.8', '2.4', out, '1', '--func=' + spec], capture_output=True, text=True)
-        self.assertEqual(res.returncode, 1)
-        self.assertIn('--func is not supported by the GPU renderer', res.stderr)
-        self.assertFalse(os.path.exists(out))
+
+# -- the GPU renderer (it cannot run here: only its build is checked; the kernels call the code tested below) ----
+
+@unittest.skipIf(shutil.which('nvcc') is None, 'needs nvcc')
+class GpuBuild(unittest.TestCase):
+    KERNELS = ('MandKern', 'MandKernPert', 'MandKernPertFx', 'MandKernPow', 'MandKernPertPow', 'MandKernPertFxPow')
+
+    def test_every_kernel_compiles_without_spilling_or_a_stack_frame(self):
+        # the step for z^d + c was written with no per-thread array so that no kernel needs local memory; keep it so
+        res = subprocess.run(['nvcc', '-Xptxas', '-v', '-arch=sm_50', '-Wno-deprecated-gpu-targets', '-c',
+                              os.path.join(ROOT, 'mand-gpu.cu'), '-o', os.path.join(tempfile.mkdtemp(), 'k.o')],
+                             capture_output=True, text=True)
+        self.assertEqual(res.returncode, 0, res.stderr[-2000:])
+        import re
+        frames, name = {}, None
+        for line in res.stderr.split('\n'):
+            m = re.search(r'Function properties for (\S+)', line)
+            if m:
+                name = m.group(1)
+            m = re.search(r'(\d+) bytes stack frame, (\d+) bytes spill stores, (\d+) bytes spill loads', line)
+            if m and name:
+                frames[name] = tuple(int(v) for v in m.groups())
+        for kernel in self.KERNELS:
+            found = [n for n in frames if re.match(r'_Z\d+%s[A-Z]' % kernel, n) and n.startswith('_Z%d%s' % (len(kernel), kernel))]
+            self.assertEqual(len(found), 1, '%s is not among %s' % (kernel, sorted(frames)))
+            self.assertEqual(frames[found[0]], (0, 0, 0), '%s uses local memory: %s' % (kernel, frames[found[0]]))
+
+    def test_the_makefile_links_the_function_file_reader_into_mand_gpu(self):
+        with open(os.path.join(ROOT, 'makefile')) as fp:
+            text = fp.read()
+        self.assertIn('funcspec.o', text.split('mand-gpu:')[1].split('\n')[0])
 
 
 # -- the reference orbit ------------------------------------------------------------------------
