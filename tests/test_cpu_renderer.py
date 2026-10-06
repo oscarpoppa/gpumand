@@ -24,7 +24,7 @@ import deepzoom
 from deepzoom import WIDTH, HEIGHT, ITERATIONS, BAILOUT2
 import test_deepzoom as td
 
-SOURCES = ['mand-cpu.c', 'colorize.c', 'bmp.c', 'get-coords.c', 'bla.c', 'refio.c']
+SOURCES = ['mand-cpu.c', 'colorize.c', 'bmp.c', 'get-coords.c', 'bla.c', 'refio.c', 'funcspec.c']
 TMP = None
 MAND = None       # built through `make mand-cpu`
 MAND_FX = None    # same sources, floatexp threshold lowered so a cheap view uses that path

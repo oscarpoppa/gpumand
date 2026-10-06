@@ -21,6 +21,9 @@ extern "C" {
  */
 int bla_build(const Cd *ref, int refn, double eps, double dcmax, BlaView *view, Bla **mem);
 
+/* The same for the map z -> z^p + c (whole p >= 2); p = 2 gives the table bla_build makes. */
+int bla_build_pow(const Cd *ref, int refn, double eps, double dcmax, int p, BlaView *view, Bla **mem);
+
 #ifdef __cplusplus
 }
 #endif
