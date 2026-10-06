@@ -306,13 +306,13 @@ def ask_cleanup(parent, count, size, reset=False):
 
 
 def ask_keep_folder(parent):
-    """Ask where to keep the files: a folder path, or None if the user cancelled."""
+    """Ask where to keep the files: a folder path, or None if the user canceled."""
     folder = QFileDialog.getExistingDirectory(parent, 'Move the files to which folder?', SAVE_DIR)
     return folder or None
 
 
 def offer_cleanup(files, reset=False):
-    """Let the user delete `files`, or keep them (moved to a folder of their choosing). False if they cancelled."""
+    """Let the user delete `files`, or keep them (moved to a folder of their choosing). False if they canceled."""
     if not files:
         return True
     choice = ask_cleanup(window, len(files), total_size(files), reset=reset)
@@ -489,7 +489,7 @@ class WaitCurs(object):
 
 
 class PicRegion(QLabel):
-    """The image view. The picture is scaled up evenly (never stretched) to fill the label and centred in it, so a
+    """The image view. The picture is scaled up evenly (never stretched) to fill the label and centered in it, so a
     bigger window gives a bigger image. To use more of a wide or tall window a little may be cropped off the edges,
     at most MAX_CROP of the picture's width or height, where there is usually only background. The selection box
     keeps the image's own shape, and mouse positions are mapped back to pixels of the real image."""
@@ -745,7 +745,7 @@ def on_delete_view(fname):
 def on_reset():
     remove_stale_references(PIX_DIR)
     if not offer_cleanup(generated_files(PIX_DIR, opening=False), reset=True):
-        return          # the user cancelled the reset
+        return          # the user canceled the reset
     with WaitCurs():
         for i in reversed(range(scr_layout.count()-1)): 
             scr_layout.itemAt(i).widget().setParent(None)

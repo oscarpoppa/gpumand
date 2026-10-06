@@ -102,12 +102,12 @@ def release(g, x, y, w):
     g['reg'].mouseReleaseEvent(ev)
 
 
-# A point on the set's boundary: views centred on it keep showing structure at every depth.
+# A point on the set's boundary: views centered on it keep showing structure at every depth.
 TARGET = (Decimal('-0.743643887037158704752191506114774'), Decimal('0.131825904205311970493132056385139'))
 
 
 def aim(g, box=120):
-    """Rubber-band (left, top, width) of a box centred on TARGET in the current view."""
+    """Rubber-band (left, top, width) of a box centered on TARGET in the current view."""
     x, y, w = (Decimal(exact(g, n)) for n in ('xbox', 'ybox', 'wbox'))
     with localcontext() as ctx:
         ctx.prec = 100
@@ -294,7 +294,7 @@ def drive():
     check('an older ini saying renderer=mand is read as mand-gpu', g['resolve_renderer']('mand') == 'mand-gpu' and
           g['resolve_renderer']('mand-gpu') == 'mand-gpu' and g['resolve_renderer']('mand-cpu') == 'mand-cpu' and
           g['resolve_renderer']('something-else') == 'something-else')
-    check('the renderer setting is honoured', g['RENDERER'] == ('mand-cpu' if REAL else 'mand-gpu'), g['RENDERER'])
+    check('the renderer setting is honored', g['RENDERER'] == ('mand-cpu' if REAL else 'mand-gpu'), g['RENDERER'])
 
     # -- Back / thumbnails / Reset
     depth = len(list(MAP))
@@ -455,7 +455,7 @@ def drive():
     # -- the image grows with the window, never stretched (a little may be cropped), and selections map to image pixels
     reg = g['reg']
     MAXC = g['MAX_CROP']
-    check('image is centred in its label', bool(reg.alignment() & QtCore.Qt.AlignCenter) == True, int(reg.alignment()))
+    check('image is centered in its label', bool(reg.alignment() & QtCore.Qt.AlignCenter) == True, int(reg.alignment()))
     pm = QtGui.QPixmap(1200, 800)
     pm.fill(QtGui.QColor('red'))
     lab = type(reg)()
@@ -487,7 +487,7 @@ def drive():
     left, top, scale, pw, ph = shown(3000, 1000)
     img = lab.grab().toImage()
     red = lambda x, y: QtGui.QColor(img.pixel(x, y)).name() == '#ff0000'
-    check('the picture is drawn centred in the label', red(left + 5, 5) and red(left + pw - 5, 995) and not red(left - 5, 500) and not red(left + pw + 5, 500))
+    check('the picture is drawn centered in the label', red(left + 5, 5) and red(left + pw - 5, 995) and not red(left - 5, 500) and not red(left + pw + 5, 500))
     # the selection box keeps the image's own shape
     ev = lambda kind, x, y: QtGui.QMouseEvent(kind, QtCore.QPointF(x, y), QtCore.Qt.LeftButton, QtCore.Qt.LeftButton, QtCore.Qt.NoModifier)
     lab.mousePressEvent(ev(QtCore.QEvent.MouseButtonPress, left + 100, 100))
@@ -1008,10 +1008,10 @@ def drive():
     check('choosing an interior color shows it on the button', g['interior_hex']() == '102030' and interior.text() == '#102030' and
           '#102030' in interior.styleSheet().lower(), (g['interior_hex'](), interior.text(), interior.styleSheet()))
     check('and recolors the view once', recolors == [MAP.curr.fname], recolors)
-    pick('')                                        # the dialog was cancelled
+    pick('')                                        # the dialog was canceled
     del recolors[:]
     interior.click()
-    check('cancelling the color dialog changes nothing', g['interior_hex']() == '102030' and not recolors, (g['interior_hex'](), recolors))
+    check('canceling the color dialog changes nothing', g['interior_hex']() == '102030' and not recolors, (g['interior_hex'](), recolors))
     pick('102030')
     interior.click()
     check('choosing the color that is already set recolors nothing', not recolors, recolors)
@@ -1414,7 +1414,7 @@ def drive():
     answer('keep')
     asked_where = []
     g['ask_keep_folder'] = lambda parent: (asked_where.append(parent), None)[1]
-    check('cancelling the folder chooser cancels the quit', window.close() is False and window.isVisible() and
+    check('canceling the folder chooser cancels the quit', window.close() is False and window.isVisible() and
           all(os.path.exists(f) for f in mine) and len(asked_where) == 1, asked_where)
     g['ask_keep_folder'] = lambda parent: dest
     check('choosing a folder lets the quit go ahead', window.close() is True and not window.isVisible())
@@ -1450,7 +1450,7 @@ def drive():
     answer('keep')
     g['ask_keep_folder'] = lambda parent: None
     g['on_reset']()
-    check('cancelling the folder chooser cancels the reset', len(list(MAP)) == 3 and all(os.path.exists(f) for f in old), len(list(MAP)))
+    check('canceling the folder chooser cancels the reset', len(list(MAP)) == 3 and all(os.path.exists(f) for f in old), len(list(MAP)))
     g['ask_keep_folder'] = lambda parent: dest
     g['on_reset']()
     folders = sorted(d for d in os.listdir(dest) if d.startswith('mandelbrot-'))

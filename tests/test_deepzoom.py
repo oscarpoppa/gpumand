@@ -28,9 +28,9 @@ from deepzoom import WIDTH, HEIGHT, BAILOUT2
 
 MAXITER = 3000
 # The Misiurewicz point c = i has self-similar spiral structure at every scale, so
-# a view centred on it has varied iteration counts however deep we zoom.
+# a view centered on it has varied iteration counts however deep we zoom.
 SPIRAL = (Decimal(0), Decimal(1))
-# Centre of a wide view whose reference orbit escapes within a few iterations,
+# Center of a wide view whose reference orbit escapes within a few iterations,
 # while pixels inside the cardioid run for MAXITER (exercises rebase-on-exhaustion).
 EARLY_ESCAPE = (Decimal('0.3'), Decimal(0))
 # Nucleus of a period-39 minibrot in seahorse valley: the reference orbit never escapes
@@ -56,7 +56,7 @@ def setUpModule():
 
 
 def view_for_center(cx, cy, w):
-    """Lower-left x, y of a view of width w centred on (cx, cy)."""
+    """Lower-left x, y of a view of width w centered on (cx, cy)."""
     with localcontext() as ctx:
         ctx.prec = deepzoom.digits_for(w) + 10
         return cx - w / 2, cy - w * HEIGHT / (2 * WIDTH)
@@ -177,7 +177,7 @@ class ReferenceFile(unittest.TestCase):
         self.assertAlmostEqual(ref.step_mant * 2.0 ** ref.step_exp, 3 / 1200.0, places=15)
 
     def test_stops_at_escape(self):
-        # centre 1+0i runs 0, 1, 2, 5, 26, 677 and stops at the first value past the escape radius
+        # center 1+0i runs 0, 1, 2, 5, 26, 677 and stops at the first value past the escape radius
         x, y = view_for_center(Decimal('1'), Decimal('0'), Decimal('1e-3'))
         ref = self.roundtrip(x, y, '1e-3', 100)
         self.assertEqual([round(abs(z)) for z in ref.orbit], [0, 1, 2, 5, 26, 677])
@@ -327,7 +327,7 @@ class Perturbation(PerturbationBase):
                 self.assertGreaterEqual(exact, 0.97, '%s limit %d: %.0f%% exact' % (mode, limit, exact * 100))
 
     def test_c_bla_follows_reference_to_its_end(self):
-        # pixels at the image centre have a tiny offset, so they ride the reference orbit all the
+        # pixels at the image center have a tiny offset, so they ride the reference orbit all the
         # way to its end, where skips must stop short of the table's last entries
         w = Decimal('1e-100')
         x, y, path, ref = self.make_ref(w, SPIRAL, 6000)
@@ -362,7 +362,7 @@ class Perturbation(PerturbationBase):
         # forced into plain steps and arrive at unaligned positions of the table.
         if CLI is None:
             self.skipTest('gcc not available')
-        centre = [(WIDTH // 2 + i, HEIGHT // 2 + j) for i in range(-2, 3) for j in range(-2, 3)]
+        middle = [(WIDTH // 2 + i, HEIGHT // 2 + j) for i in range(-2, 3) for j in range(-2, 3)]
         for w, center, limits in (('1e-100', SPIRAL, (6000, 300, 333, 351, 364, 371)),
                                   ('1e-8', MINIBROT, (3000, 1001, 2999))):
             x, y, path, ref = self.make_ref(Decimal(w), center, 6000)
@@ -371,7 +371,7 @@ class Perturbation(PerturbationBase):
             for limit in limits:
                 res = subprocess.run([CLI, 'bla', path, str(limit)], env=dict(os.environ, PERT_TRACE='1'),
                                      capture_output=True, text=True,
-                                     input=''.join('%d %d\n' % p for p in self.pixels(6, 40) + centre))
+                                     input=''.join('%d %d\n' % p for p in self.pixels(6, 40) + middle))
                 self.assertEqual(res.returncode, 0, res.stderr[-2000:])
                 for line in res.stderr.split('\n'):
                     fields = line.split()
@@ -386,7 +386,7 @@ class Perturbation(PerturbationBase):
 
 
 def nucleus(guess, period, bits=5000, digits=1500):
-    """Centre of the period-`period` minibrot near `guess`, by Newton's method at high precision."""
+    """Center of the period-`period` minibrot near `guess`, by Newton's method at high precision."""
     from gmpy2 import mpc, mpfr
     with gmpy2.context(precision=bits):
         c = mpc(mpfr(str(guess[0])), mpfr(str(guess[1])))
@@ -401,7 +401,7 @@ def nucleus(guess, period, bits=5000, digits=1500):
 
 class FloatexpFast(unittest.TestCase):
     """The fast floatexp loop (plain double arithmetic with a separate exponent) must agree with
-    the original slow loop, kept in tests/fx_reference.h, which renormalises every operation."""
+    the original slow loop, kept in tests/fx_reference.h, which renormalizes every operation."""
 
     @classmethod
     def setUpClass(cls):
@@ -448,7 +448,7 @@ class FloatexpFast(unittest.TestCase):
         for w in ('1e-3', '1e-5'):
             self.compare(w, MINIBROT, min_distinct=20)
 
-    def test_view_centred_exactly_on_a_nucleus(self):
+    def test_view_centered_exactly_on_a_nucleus(self):
         # the reference orbit passes through (almost) exactly zero every 39 iterations
         for w in ('1e-3', '1e-5', '1e-30', '1e-400'):
             self.compare(w, self.nucleus, min_distinct=20 if w in ('1e-3', '1e-5') else 1)
@@ -528,8 +528,8 @@ class SmoothIterationCount(PerturbationBase):
                 hi = mid
         k = min(idx(edge[0], cy), idx(edge[1], cy))
         w = Decimal('1e-12')
-        centre = (Decimal(lo), Decimal(cy))      # a double is an exact Decimal
-        x, y, path, ref = self.make_ref(w, centre, 300)
+        center = (Decimal(lo), Decimal(cy))      # a double is an exact Decimal
+        x, y, path, ref = self.make_ref(w, center, 300)
         row = [(px, HEIGHT // 2) for px in range(WIDTH)]
         got = self.run_cli_nu('dbl', path, row, 300)
         counts = {c for c, _, _ in got}

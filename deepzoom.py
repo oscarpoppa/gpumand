@@ -3,7 +3,7 @@
 
 The GPU renderer iterates in double precision, which stops resolving
 pixels once the view is narrower than ~1e-13. For deeper views we compute
-one reference orbit at the centre of the image here, in arbitrary
+one reference orbit at the center of the image here, in arbitrary
 precision, and the renderer iterates each pixel's small difference from it
 (perturbation theory) in plain double.
 
@@ -101,7 +101,7 @@ MAX_REFERENCE = (1 << 24) - 1     # longest reference orbit the renderers load (
 
 
 def reference_orbit(x, y, w, maxiter):
-    """Orbit of the view's centre, as an array('d') of re, im, re, im, ...
+    """Orbit of the view's center, as an array('d') of re, im, re, im, ...
 
     The orbit is cut off at MAX_REFERENCE steps however high the iteration limit is: a pixel that outlasts the
     reference starts over from it (rebasing), so very large limits need no longer orbit."""

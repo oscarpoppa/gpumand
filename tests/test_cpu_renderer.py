@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Tests for mand-cpu, the CPU renderer. Skipped when gcc/OpenMP are unavailable.
 
-Each render is checked against what the maths says it must be: the smooth iteration count (nu)
+Each render is checked against what the math says it must be: the smooth iteration count (nu)
 of a sampled pixel, read from the --nu-out file, equals the value from direct high-precision
 iteration (or from a Python mirror of the plain kernel). Coloring is tested in test_colorize.py;
 here only the pipeline's consistency with the `colorize` tool is checked.
@@ -122,7 +122,7 @@ class CpuRenderer(unittest.TestCase):
         self.assertEqual(os.path.getsize(out), 54 + 4 * WIDTH * HEIGHT)
         self.assertTrue(any(v == -1.0 for v in nu), 'the whole set has interior pixels')
         self.assertTrue(all(v == -1.0 or v >= 0.0 for v in nu))
-        # interior pixels get the interior color (black by default); the cardioid's centre is inside
+        # interior pixels get the interior color (black by default); the cardioid's center is inside
         inside = [i for i, v in enumerate(nu) if v == -1.0]
         self.assertTrue(all(pix[i] == 0 for i in inside[:2000]))
 
