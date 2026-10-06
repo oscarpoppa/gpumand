@@ -32,7 +32,7 @@ def corner(center, w):
         return center[0] - w / 2, center[1] - w * HEIGHT / (2 * WIDTH)
 
 
-def render(tmp, name, x, y, w, mult, palette='gray', mapping='histogram', extra=()):
+def render(tmp, name, x, y, w, mult, palette='twilight', mapping='histogram', extra=()):
     """Draw a view with mand-cpu; returns the path of its counts file (for recoloring)."""
     nu, bmp = os.path.join(tmp, name + '.nu'), os.path.join(tmp, name + '.bmp')
     cmd = [os.path.join(ROOT, 'mand-cpu'), str(x), str(y), str(w), bmp, str(mult)]
@@ -94,10 +94,11 @@ def main():
         x, y = corner(SEAHORSE, Decimal('0.004'))
         views.append((render(tmp, 'sea', x, y, Decimal('0.004'), 3), 'seahorse valley  (width 4e-3)'))
         x, y = corner(SPIRAL, Decimal('1e-30'))
-        views.append((render(tmp, 'sp30', x, y, Decimal('1e-30'), 10), 'a spiral  (width 1e-30)'))
+        views.append((render(tmp, 'sp30', x, y, Decimal('1e-30'), 10, 'fire'), 'a spiral  (width 1e-30)'))
         x, y = corner(SPIRAL, Decimal('1e-300'))
-        views.append((render(tmp, 'sp300', x, y, Decimal('1e-300'), 10), 'the same spiral  (width 1e-300)'))
-        tiles = [caption(recolor(nu, os.path.join(tmp, 't%d.bmp' % i), '--palette=gray'), label) for i, (nu, label) in enumerate(views)]
+        views.append((render(tmp, 'sp300', x, y, Decimal('1e-300'), 10, 'aurora'), 'the same spiral  (width 1e-300)'))
+        pal = ['twilight', 'twilight', 'fire', 'aurora']
+        tiles = [caption(recolor(nu, os.path.join(tmp, 't%d.bmp' % i), '--palette=' + pal[i]), label) for i, (nu, label) in enumerate(views)]
         sheet(tiles, 2, 640).save(os.path.join(OUT, 'zoom-journey.png'), optimize=True)
 
         # 2. one view in every palette
