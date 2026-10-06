@@ -21,22 +21,28 @@ typedef struct {
     double step_mant;
 } RefHeader;
 
-/* the same Horner evaluation as pow_q, in long double, for the step-by-step side of blacheck */
-static void step_ld(const Pow *pw, long double zx, long double zy, long double dx, long double dy,
+/* One step of the map in long double, written differently from pow_q on purpose: the binomial expansion
+ * (Z + d)^p - Z^p = sum_{j=1}^{p} C(p, j) Z^(p-j) d^j, Horner in d, with Pascal's triangle in long double. */
+static void step_ld(int p, long double zx, long double zy, long double dx, long double dy,
                     long double cx, long double cy, long double *nx, long double *ny) {
-    long double px[POWER_MAX_DEGREE], py[POWER_MAX_DEGREE];
-    const int d = pw->d;
+    long double row[POWER_MAX_DEGREE + 1], px[POWER_MAX_DEGREE], py[POWER_MAX_DEGREE];
+    for (int j = 0; j <= POWER_MAX_DEGREE; j++)
+        row[j] = 0;
+    row[0] = 1;
+    for (int i = 1; i <= p; i++)
+        for (int j = i; j >= 1; j--)
+            row[j] += row[j - 1];
     px[0] = 1;
     py[0] = 0;
-    for (int k = 1; k < d; k++) {
+    for (int k = 1; k < p; k++) {
         px[k] = px[k - 1] * zx - py[k - 1] * zy;
         py[k] = px[k - 1] * zy + py[k - 1] * zx;
     }
-    long double ax = 1, ay = 0;
-    for (int m = d - 2; m >= 0; m--) {
+    long double ax = 1, ay = 0;                         /* the coefficient of d^(p-1) after dividing out one d */
+    for (int m = p - 2; m >= 0; m--) {
         const long double tx = ax * dx - ay * dy, ty = ax * dy + ay * dx;
-        ax = pw->binom[m + 1] * px[d - 1 - m] + tx;
-        ay = pw->binom[m + 1] * py[d - 1 - m] + ty;
+        ax = row[m + 1] * px[p - 1 - m] + tx;
+        ay = row[m + 1] * py[p - 1 - m] + ty;
     }
     *nx = dx * ax - dy * ay + cx;
     *ny = dx * ay + dy * ax + cy;
@@ -77,9 +83,7 @@ int main(int argc, char **argv) {
     const double dcmax = step * hypot(WIDTH / 2, HEIGHT / 2) * 1.01;
     BlaView bv;
     Bla *mem = NULL;
-    Pow pw;
     memset(&bv, 0, sizeof(bv));
-    pow_init(&pw, p);
     if (bla_build_pow(ref, refn, BLA_EPS, dcmax, p, &bv, &mem)) {
         fprintf(stderr, "out of memory\n");
         return 2;
@@ -103,7 +107,7 @@ int main(int argc, char **argv) {
             const long double d0x = dx, d0y = dy;
             for (int i = 0; i < (1 << k); i++) {
                 long double nx, ny;
-                step_ld(&pw, ref[(j << k) + i].x, ref[(j << k) + i].y, dx, dy, cx, cy, &nx, &ny);
+                step_ld(p, ref[(j << k) + i].x, ref[(j << k) + i].y, dx, dy, cx, cy, &nx, &ny);
                 dx = nx;
                 dy = ny;
             }
