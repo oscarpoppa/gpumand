@@ -1,12 +1,12 @@
 /*
- * The original, slow floatexp loop (every operation renormalises through frexp/ldexp), kept as the
+ * The original, slow floatexp loop (every operation renormalizes through frexp/ldexp), kept as the
  * golden reference the fast loop in pert.h is tested against. Test code only.
  */
 #ifndef __FX_REFERENCE_H
 #define __FX_REFERENCE_H
 #include "../pert.h"
 
-/* step = step_mant * 2^step_exp is the pixel spacing; ox, oy are pixel offsets from the centre */
+/* step = step_mant * 2^step_exp is the pixel spacing; ox, oy are pixel offsets from the center */
 HD static inline iter_t pert_pixel_fx_ref(const Cd *ref, int refn, double ox, double oy,
                                    double step_mant, int step_exp, iter_t iterations, uint32_t *steps, double *nu) {
     const Fx dc = fx_norm(ox * step_mant, oy * step_mant, step_exp);

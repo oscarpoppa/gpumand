@@ -73,7 +73,7 @@ class Palettes(unittest.TestCase):
             for a, b in zip(table, table[1:] + table[:1]):          # includes the wrap-around step
                 worst = max(worst, max(abs(x - y) for x, y in zip(channels(a), channels(b))))
             # classic is the original 8-bit ramp, played forwards and back; it has one 13-level step where it enters its gray tail
-            self.assertLessEqual(worst, 8 if name != 'classic' else 14, '%s: biggest step between neighbours is %d levels' % (name, worst))
+            self.assertLessEqual(worst, 8 if name != 'classic' else 14, '%s: biggest step between neighbors is %d levels' % (name, worst))
 
     def test_gradient_palettes_have_no_kinks_including_at_the_seam(self):
         # a smooth spline has tiny second differences; a kink (e.g. a bad wrap at the loop's join) shows up here

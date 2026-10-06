@@ -4,8 +4,8 @@
  * Per-pixel perturbation iteration, shared by the CUDA kernels in mand-gpu.cu
  * and by the native test harness (tests/pert_cli.c). Plain C so both can use it.
  *
- * ref[0..refn-1] is the reference orbit Z_n of the image centre (Z_0 = 0). A pixel at
- * offset dc from the centre follows z_n = Z_n + d_n with
+ * ref[0..refn-1] is the reference orbit Z_n of the image center (Z_0 = 0). A pixel at
+ * offset dc from the center follows z_n = Z_n + d_n with
  *     d_{n+1} = 2*Z_n*d_n + d_n^2 + dc.
  * Both loops "rebase" (d = z, n = 0) when the reference runs out, and also when |z| < |d|,
  * the standard safeguard against the reference being a poor match for a pixel (glitches).
@@ -157,7 +157,7 @@ HD static inline Fx fx_add(Fx a, Fx b) {
                    ldexp(a.y, a.e - e) + ldexp(b.y, b.e - e), e);
 }
 
-/* |a| < |b| for normalised values (compares max-norms) */
+/* |a| < |b| for normalized values (compares max-norms) */
 HD static inline int fx_less(Fx a, Fx b) {
     if (fx_zero(a)) return !fx_zero(b);
     if (fx_zero(b)) return 0;
@@ -178,7 +178,7 @@ HD static inline double fx_scale(int k) { return k >= FX_SCALE_MIN ? ldexp(1.0, 
  *
  * In units of 2^k the recurrence d' = 2*Z*d + d^2 + dc reads
  *     e' = 2*Z*e + 2^k * e^2 + dcs,   with dcs = dc * 2^-k   (kept up to date whenever k changes).
- * step = step_mant * 2^step_exp is the pixel spacing; ox, oy are pixel offsets from the centre.
+ * step = step_mant * 2^step_exp is the pixel spacing; ox, oy are pixel offsets from the center.
  */
 HD static inline iter_t pert_pixel_fx(const Cd *ref, int refn, double ox, double oy,
                                    double step_mant, int step_exp, iter_t iterations, uint32_t *steps, double *nu) {
