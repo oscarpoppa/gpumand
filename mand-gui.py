@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 import os
 from PyQt5.QtCore import QPoint, QRect, QSize, Qt, pyqtSlot
-from PyQt5.QtGui import QIcon, QImage, QKeySequence, QPixmap
-from PyQt5.QtWidgets import (QApplication, QComboBox, QDial, QDoubleSpinBox, QFileDialog, QFormLayout, QGroupBox, QHBoxLayout,
-                             QLabel, QLineEdit, QMessageBox, QPushButton, QRubberBand, QScrollArea, QShortcut, QSizePolicy, QVBoxLayout, QWidget)
+from PyQt5.QtGui import QColor, QIcon, QImage, QKeySequence, QPixmap
+from PyQt5.QtWidgets import (QApplication, QColorDialog, QComboBox, QDial, QDoubleSpinBox, QFileDialog, QFormLayout, QGroupBox, QHBoxLayout,
+                             QLabel, QLineEdit, QMessageBox, QPushButton, QRubberBand, QScrollArea, QShortcut, QSizePolicy, QSplitter,
+                             QVBoxLayout, QWidget)
 from sys import argv, exit, stderr
 from subprocess import call, run as run_process     # `run` is the Run button below
 import shutil
@@ -63,7 +64,7 @@ TN_HGT = 120
 # the picture may be cropped by up to this fraction of its width or height to fill a window of another shape
 MAX_CROP = 0.15
 # width of the column of controls beside the picture
-SIDE_WID = 270
+SIDE_WID = 290
 # a dark gray control area; the image is the brightest thing on screen
 DARK_STYLE = """
 QWidget { background-color: #2d2d2d; color: #dcdcdc; }
@@ -78,6 +79,9 @@ QScrollArea { border: none; }
 QScrollBar:vertical { background: #2d2d2d; width: 12px; }
 QScrollBar::handle:vertical { background: #666; border-radius: 5px; min-height: 24px; }
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
+QSplitter::handle:vertical { background-color: #555; margin: 2px 30px; border-radius: 1px; }
+QSplitter::handle:vertical:hover { background-color: #8a8a8a; }
+QPushButton:checked { background-color: #5a6e8c; border-color: #8aa0c0; }
 QPushButton#thumbclose { padding: 0; background-color: rgba(0, 0, 0, 170); border: 1px solid #999; border-radius: 9px; color: #eee; font-weight: bold; }
 QPushButton#thumbclose:hover { background-color: #b03a3a; border-color: #eee; }
 QToolTip { background-color: #3c3c3c; color: #dcdcdc; border: 1px solid #666; }
@@ -119,28 +123,65 @@ def load_pixmap(path):
 VIEW_COLORS = {}
 
 
+Colors = namedtuple('Colors', ('palette', 'mapping', 'scale', 'shift', 'gamma', 'brightness', 'contrast', 'interior'))
+INTERIOR_DEFAULT = '000000'
+
+
 def current_colors():
-    return (pal_box.currentText(), map_box.currentText(), scale_box.value(), shift_box.value())
+    return Colors(pal_box.currentText(), map_box.currentText(), scale_box.value(), shift_box.value(), gamma_box.value(),
+                  brightness_box.value(), contrast_box.value(), interior_hex())
 
 
-def set_color_controls(palette, mapping, scale, shift):
+def interior_hex():
+    return interior_btn.property('hex')
+
+
+def show_interior(hexcolor):
+    """Show a color on the Interior button (without recoloring anything)."""
+    c = QColor('#' + hexcolor)
+    interior_btn.setProperty('hex', hexcolor)
+    interior_btn.setText('#' + hexcolor)
+    light = c.lightness() > 128
+    interior_btn.setStyleSheet('QPushButton {{ background-color: #{}; color: {}; border: 1px solid #888; }}'.format(
+        hexcolor, '#000' if light else '#fff'))
+
+
+def set_color_controls(palette, mapping, scale, shift, gamma=1.0, brightness=0.0, contrast=0.0, interior=INTERIOR_DEFAULT):
     """Show these color settings in the Colors box without recoloring anything (the picture already has them)."""
-    for box in (pal_box, map_box, scale_box, shift_box):
+    boxes = (pal_box, map_box, scale_box, shift_box, gamma_box, brightness_box, contrast_box)
+    for box in boxes:
         box.blockSignals(True)
     if pal_box.findText(palette) >= 0:
         pal_box.setCurrentText(palette)
     map_box.setCurrentText(mapping)
+    update_scale_step()
     scale_box.setValue(scale)
     shift_box.setValue(shift)
-    for box in (pal_box, map_box, scale_box, shift_box):
+    gamma_box.setValue(gamma)
+    brightness_box.setValue(brightness)
+    contrast_box.setValue(contrast)
+    show_interior(interior)
+    for box in boxes:
         box.blockSignals(False)
+
+
+def choose_interior():
+    """The Interior button: pick the color of the pixels inside the set."""
+    start = QColor('#' + interior_hex())
+    if start.value() == 0:
+        # the dialog takes brightness from its slider, not from the spectrum: opened on black, every spectrum click would still give black
+        start = QColor.fromHsv(0, 0, 255)
+    chosen = QColorDialog.getColor(start, window, 'Interior color')
+    if chosen.isValid() and chosen.name()[1:] != interior_hex():
+        show_interior(chosen.name()[1:])
+        on_color_change()
 
 
 def view_meta(item):
     """The text fields describing a view, for its PNG."""
-    palette, mapping, scale, shift = VIEW_COLORS.get(item.fname) or current_colors()
+    colors = VIEW_COLORS.get(item.fname) or current_colors()
     x, y, w, d = item.xywd
-    return view_text(x, y, w, MULTIPLIERS[int(d)], palette, mapping, scale, shift)
+    return view_text(x, y, w, MULTIPLIERS[int(d)], *colors)
 
 
 def write_png(item, source, target):
@@ -191,6 +232,14 @@ def color_options():
         opts.append('--scale={:g}'.format(scale_box.value()))
     if shift_box.value() != 0:
         opts.append('--shift={:g}'.format(shift_box.value()))
+    if gamma_box.value() != 1:
+        opts.append('--gamma={:g}'.format(gamma_box.value()))
+    if brightness_box.value() != 0:
+        opts.append('--brightness={:g}'.format(brightness_box.value()))
+    if contrast_box.value() != 0:
+        opts.append('--contrast={:g}'.format(contrast_box.value()))
+    if interior_hex() != INTERIOR_DEFAULT:
+        opts.append('--interior=' + interior_hex())
     return opts
 
 
@@ -529,6 +578,82 @@ class PicRegion(QLabel):
                 show_coords(self.cand_xyw.x, self.cand_xyw.y, self.cand_xyw.w)
 
 
+# What Scale means differs by mapping, so its arrow buttons step by an amount that suits the mapping: about 1 to 2% of the
+# mapping's own starting value (see README). `start` is that starting value, which "default" stands for.
+SCALE_STEPS = {'histogram': (2.5, 0.05), 'linear': (50.0, 0.5), 'log': (0.6, 0.01)}
+
+
+class ScaleBox(QDoubleSpinBox):
+    start = 1.0
+
+    def stepBy(self, steps):
+        if self.value() == 0:
+            # showing "default": the first click moves from the mapping's own value, not from 0
+            self.setValue(max(self.minimum() + self.singleStep(), self.start + steps * self.singleStep()))
+        else:
+            super().stepBy(steps)
+
+
+def update_scale_step():
+    """Make Scale's arrows suit the mapping now chosen."""
+    scale_box.start, scale_box.step = SCALE_STEPS[map_box.currentText()]
+    scale_box.setSingleStep(scale_box.step)
+
+
+class SplitPanes(object):
+    """Keeps the Controls and Images buttons in step with the bar between the two parts of the side column:
+    each button shows or hides its part, dragging the bar all the way to an end hides that part (and
+    unchecks its button), and one part is always showing."""
+    MIN = 100           # a part dragged smaller than this closes (it would show next to nothing)
+
+    def __init__(self, splitter, controls_btn, images_btn):
+        self.split = splitter
+        self.buttons = (controls_btn, images_btn)
+        self.shares = None      # how the height was last divided between the two while both showed
+
+    def total(self):
+        return max(1, sum(self.split.sizes()))
+
+    def set_sizes(self, controls, images):
+        self.split.setSizes([controls, images])
+
+    def toggled(self, which, on):
+        other = self.buttons[1 - which]
+        if not on and not other.isChecked():
+            self.buttons[which].setChecked(True)        # never hide both parts
+            return
+        total = self.total()
+        if self.buttons[0].isChecked() and self.buttons[1].isChecked():
+            first = self.shares if self.shares is not None else self.preferred(total)
+            self.set_sizes(first, total - first)
+        elif self.buttons[0].isChecked():
+            self.set_sizes(total, 0)
+        else:
+            self.set_sizes(0, total)
+
+    def preferred(self, total):
+        """The height for the controls when both parts show and nothing has been chosen: all they need, up to 60%."""
+        need = self.split.widget(0).widget().sizeHint().height() + 4
+        return max(self.MIN, min(need, int(total * 0.6)))
+
+    def moved(self, *_):
+        sizes = self.split.sizes()
+        if sizes[0] < self.MIN and sizes[1] >= self.MIN:
+            sizes = [0, sum(sizes)]
+        elif sizes[1] < self.MIN and sizes[0] >= self.MIN:
+            sizes = [sum(sizes), 0]
+        elif sizes[0] < self.MIN and sizes[1] < self.MIN:
+            sizes = [sum(sizes), 0]
+        for button, size in zip(self.buttons, sizes):
+            button.blockSignals(True)
+            button.setChecked(size > 0)
+            button.blockSignals(False)
+        if min(sizes) > 0:
+            self.shares = sizes[0]
+        else:
+            self.split.setSizes(sizes)
+
+
 def show_coords(x, y, w):
     """Fill the read-only coordinate boxes. A very long value is shown abbreviated (leading digits, an ellipsis,
     trailing digits, and its power of ten); the exact text is kept on the box and in its tooltip."""
@@ -743,15 +868,8 @@ def on_open():
         QMessageBox.warning(window, 'Cannot open {}'.format(os.path.basename(path)),
                             'the iteration multiplier {} is not one this program offers'.format(view['multiplier']))
         return
-    for box, value in ((pal_box, view['palette']), (map_box, view['mapping'])):
-        if box.findText(value) >= 0:
-            box.blockSignals(True)          # (set the controls without recoloring the view on screen first)
-            box.setCurrentText(value)
-            box.blockSignals(False)
-    for box, value in ((scale_box, view['scale']), (shift_box, view['shift'])):
-        box.blockSignals(True)
-        box.setValue(value)
-        box.blockSignals(False)
+    set_color_controls(view['palette'], view['mapping'], view['scale'], view['shift'], view['gamma'], view['brightness'],
+                       view['contrast'], view['interior'])      # (the controls change without recoloring the view on screen first)
     reg.cand_xyw.x, reg.cand_xyw.y, reg.cand_xyw.w = view['x'], view['y'], view['w']
     show_coords(view['x'], view['y'], view['w'])
     inter.setCurrentIndex(MULTIPLIERS.index(view['multiplier']))
@@ -828,10 +946,10 @@ if __name__ == '__main__':
     map_box.setToolTip('histogram: spread the colors evenly over the image (any depth)\n'
                        'linear: a fixed number of iterations per color cycle\n'
                        'log: color cycles per doubling of the iteration count')
-    scale_box = QDoubleSpinBox()
+    scale_box = ScaleBox()
     scale_box.setRange(0.0, 1000000.0)
-    scale_box.setDecimals(2)
-    scale_box.setSingleStep(0.5)
+    scale_box.setDecimals(3)
+    update_scale_step()
     scale_box.setSpecialValueText('default')
     scale_box.setKeyboardTracking(False)
     scale_box.setToolTip('histogram: palette cycles across the image\nlinear: iterations per cycle\n'
@@ -842,16 +960,59 @@ if __name__ == '__main__':
     shift_box.setSingleStep(0.05)
     shift_box.setKeyboardTracking(False)
     shift_box.setToolTip('Rotate the palette (1 is a full turn)')
-    # each of Scale and Shift has its own button to put it back how it starts (changing the value recolors, once)
+    gamma_box = QDoubleSpinBox()
+    gamma_box.setRange(0.1, 10.0)
+    gamma_box.setDecimals(2)
+    gamma_box.setSingleStep(0.05)
+    gamma_box.setValue(1.0)
+    gamma_box.setKeyboardTracking(False)
+    gamma_box.setToolTip('Bend the colors within each palette cycle.\nAbove 1 favors the start of the palette, below 1 the end; 1 changes nothing.')
+    brightness_box = QDoubleSpinBox()
+    brightness_box.setRange(-100.0, 100.0)
+    brightness_box.setDecimals(0)
+    brightness_box.setSingleStep(5.0)
+    brightness_box.setKeyboardTracking(False)
+    brightness_box.setToolTip('Make every palette color lighter (above 0) or darker (below 0).\nThe interior color is not changed.')
+    contrast_box = QDoubleSpinBox()
+    contrast_box.setRange(-100.0, 100.0)
+    contrast_box.setDecimals(0)
+    contrast_box.setSingleStep(5.0)
+    contrast_box.setKeyboardTracking(False)
+    contrast_box.setToolTip('Push the palette colors away from mid-gray (above 0) or toward it (below 0; -100 is all gray).\n'
+                            'The interior color is not changed.')
+    interior_btn = QPushButton()
+    interior_btn.setToolTip('The color of the pixels inside the set (click to choose)')
+    interior_btn.clicked.connect(choose_interior)
+    show_interior(INTERIOR_DEFAULT)
+    # each of the color settings below has its own button to put it back how it starts (changing the value recolors, once)
     restore_scale_btn = QPushButton('Restore')
     restore_scale_btn.setToolTip("Put Scale back to its default (the mapping's own value)")
     restore_scale_btn.clicked.connect(lambda: scale_box.setValue(0.0))
     restore_shift_btn = QPushButton('Restore')
     restore_shift_btn.setToolTip('Put Shift back to 0')
     restore_shift_btn.clicked.connect(lambda: shift_box.setValue(0.0))
+    restore_gamma_btn = QPushButton('Restore')
+    restore_gamma_btn.setToolTip('Put Gamma back to 1')
+    restore_gamma_btn.clicked.connect(lambda: gamma_box.setValue(1.0))
+    restore_brightness_btn = QPushButton('Restore')
+    restore_brightness_btn.setToolTip('Put Brightness back to 0')
+    restore_brightness_btn.clicked.connect(lambda: brightness_box.setValue(0.0))
+    restore_contrast_btn = QPushButton('Restore')
+    restore_contrast_btn.setToolTip('Put Contrast back to 0')
+    restore_contrast_btn.clicked.connect(lambda: contrast_box.setValue(0.0))
+    restore_interior_btn = QPushButton('Restore')
+    restore_interior_btn.setToolTip('Put the interior color back to black')
+
+    def restore_interior():
+        if interior_hex() != INTERIOR_DEFAULT:
+            show_interior(INTERIOR_DEFAULT)
+            on_color_change()
+    restore_interior_btn.clicked.connect(restore_interior)
+    map_box.currentIndexChanged.connect(update_scale_step)
     for control in (pal_box, map_box):
         control.currentIndexChanged.connect(on_color_change)
-    for control in (scale_box, shift_box):
+    for control in (scale_box, shift_box, gamma_box, brightness_box, contrast_box):
+        control.setMinimumWidth(56)         # (a spin box otherwise reserves room for the biggest number it could show)
         control.valueChanged.connect(on_color_change)
     # Everything but the picture lives in one narrow column on the right, so the picture gets the whole
     # height of the window.
@@ -870,7 +1031,6 @@ if __name__ == '__main__':
     btnbox.addWidget(reset)
     sel_box = QVBoxLayout()
     sel_box.addLayout(sel_form)
-    sel_box.addLayout(btnbox)
     sel_box.addWidget(open_btn)
     sel_group = QGroupBox('Selection')
     sel_group.setLayout(sel_box)
@@ -888,6 +1048,10 @@ if __name__ == '__main__':
     color_form.addRow('Mapping:', map_box)
     color_form.addRow('Scale:', with_restore(scale_box, restore_scale_btn))
     color_form.addRow('Shift:', with_restore(shift_box, restore_shift_btn))
+    color_form.addRow('Gamma:', with_restore(gamma_box, restore_gamma_btn))
+    color_form.addRow('Brightness:', with_restore(brightness_box, restore_brightness_btn))
+    color_form.addRow('Contrast:', with_restore(contrast_box, restore_contrast_btn))
+    color_form.addRow('Interior:', with_restore(interior_btn, restore_interior_btn))
     color_group = QGroupBox('Colors')
     color_group.setLayout(color_form)
     iter_form = QFormLayout()
@@ -898,12 +1062,49 @@ if __name__ == '__main__':
     iter_box.addLayout(iter_form)
     iter_group = QGroupBox('Iterations')
     iter_group.setLayout(iter_box)
+    # The column has two parts that share its height: the controls (scrolling when they do not fit) and the
+    # history thumbnails. Drag the bar between them to give either more room, or use the two buttons
+    # above to show just one. The row of buttons stays in view whichever is open.
+    controls_panel = QWidget()
+    controls_layout = QVBoxLayout()
+    controls_layout.setContentsMargins(0, 0, 4, 0)
+    controls_layout.addWidget(sel_group)
+    controls_layout.addWidget(iter_group)
+    controls_layout.addWidget(color_group)
+    controls_layout.addStretch(1)
+    controls_panel.setLayout(controls_layout)
+    controls_scroll = QScrollArea()
+    controls_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+    controls_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+    controls_scroll.setWidgetResizable(True)
+    controls_scroll.setWidget(controls_panel)
+    split = QSplitter(Qt.Vertical)
+    split.setChildrenCollapsible(True)
+    split.setHandleWidth(7)
+    split.addWidget(controls_scroll)
+    split.addWidget(scroll)
+    split.setStretchFactor(0, 0)
+    split.setStretchFactor(1, 1)
+    controls_btn = QPushButton('Controls')
+    images_btn = QPushButton('Images')
+    for toggle, text in ((controls_btn, 'Show or hide the controls (drag the bar below to resize them)'),
+                         (images_btn, 'Show or hide the history pictures (drag the bar below to resize them)')):
+        toggle.setCheckable(True)
+        toggle.setChecked(True)
+        toggle.setToolTip(text)
+    panes = SplitPanes(split, controls_btn, images_btn)
+    controls_btn.toggled.connect(lambda on: panes.toggled(0, on))
+    images_btn.toggled.connect(lambda on: panes.toggled(1, on))
+    split.splitterMoved.connect(panes.moved)
+    toggles = QHBoxLayout()
+    toggles.setSpacing(4)
+    toggles.addWidget(controls_btn)
+    toggles.addWidget(images_btn)
     right = QVBoxLayout()
     right.setContentsMargins(0, 0, 0, 0)
-    right.addWidget(sel_group)
-    right.addWidget(iter_group)
-    right.addWidget(color_group)
-    right.addWidget(scroll, 1)
+    right.addLayout(btnbox)
+    right.addLayout(toggles)
+    right.addWidget(split, 1)
     side = QWidget()
     side.setLayout(right)
     side.setFixedWidth(SIDE_WID)
@@ -922,5 +1123,8 @@ if __name__ == '__main__':
     window.setMinimumSize(hint)
     window.resize(max(WIN_WID, hint.width()), hint.height())
     window.show()
+    first = panes.preferred(panes.total())       # open with the controls as big as they need, up to 60% of the column
+    panes.set_sizes(first, panes.total() - first)
+    panes.shares = first
     exit(app.exec_())
 

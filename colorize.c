@@ -184,6 +184,9 @@ void colorize_defaults(ColorOpts *o) {
     o->mapping = MAP_HISTOGRAM;
     o->scale = 0.0;
     o->shift = 0.0;
+    o->gamma = 1.0;
+    o->brightness = 0.0;
+    o->contrast = 0.0;
     o->interior = 0x000000;
 }
 
@@ -234,6 +237,33 @@ int colorize_parse_option(ColorOpts *o, const char *arg, char *err, size_t errle
             return -1;
         }
         o->shift = v;
+        return 1;
+    }
+    if (klen == 7 && !strncmp(arg, "--gamma", 7)) {
+        const double v = strtod(val, &end);
+        if (*val == 0 || *end || !(v >= 0.1 && v <= 10.0)) {
+            fail(err, errlen, "bad --gamma value '%s' (a number from 0.1 to 10; 1 changes nothing)", val);
+            return -1;
+        }
+        o->gamma = v;
+        return 1;
+    }
+    if (klen == 12 && !strncmp(arg, "--brightness", 12)) {
+        const double v = strtod(val, &end);
+        if (*val == 0 || *end || !(v >= -100.0 && v <= 100.0)) {
+            fail(err, errlen, "bad --brightness value '%s' (a number from -100 to 100; 0 changes nothing)", val);
+            return -1;
+        }
+        o->brightness = v;
+        return 1;
+    }
+    if (klen == 10 && !strncmp(arg, "--contrast", 10)) {
+        const double v = strtod(val, &end);
+        if (*val == 0 || *end || !(v >= -100.0 && v <= 100.0)) {
+            fail(err, errlen, "bad --contrast value '%s' (a number from -100 to 100; 0 changes nothing)", val);
+            return -1;
+        }
+        o->contrast = v;
         return 1;
     }
     if (klen == 10 && !strncmp(arg, "--interior", 10)) {
@@ -296,10 +326,30 @@ void color_positions(const double *nu, size_t n, const ColorOpts *o, double *pos
     }
 }
 
+/* Brightness and contrast act on the palette's own colors (not the interior color): each channel c becomes
+ * (c - 127.5) * (1 + contrast/100) + 127.5 + brightness * 2.55, rounded and limited to 0..255. */
+static void adjust_table(uint32_t *table, const ColorOpts *o) {
+    if (o->brightness == 0.0 && o->contrast == 0.0)
+        return;
+    const double k = 1.0 + o->contrast / 100.0, add = o->brightness * 2.55;
+    for (int i = 0; i < PALETTE_SIZE; i++) {
+        uint32_t c = 0;
+        for (int shift = 0; shift <= 16; shift += 8) {
+            const double ch = (double)((table[i] >> shift) & 0xFF);
+            double v = floor((ch - 127.5) * k + 127.5 + add + 0.5);
+            if (v < 0.0) v = 0.0;
+            if (v > 255.0) v = 255.0;
+            c |= (uint32_t)v << shift;
+        }
+        table[i] = c;
+    }
+}
+
 int colorize_image(const double *nu, int w, int h, const ColorOpts *o, uint32_t *out) {
     uint32_t table[PALETTE_SIZE];
     if (palette_build(o->palette, table))
         return -1;
+    adjust_table(table, o);
     const size_t n = (size_t)w * h;
     double *pos = (double *)malloc((n ? n : 1) * sizeof(double));
     if (!pos) {
@@ -313,6 +363,8 @@ int colorize_image(const double *nu, int w, int h, const ColorOpts *o, uint32_t 
             continue;
         }
         double f = pos[i] - floor(pos[i]);
+        if (o->gamma != 1.0)
+            f = pow(f, o->gamma);
         int k = (int)(f * PALETTE_SIZE);
         if (k >= PALETTE_SIZE) k = PALETTE_SIZE - 1;
         out[i] = table[k];

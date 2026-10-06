@@ -24,7 +24,12 @@ extern "C" {
  *              evenly whatever the depth or iteration limit. scale = cycles over the range.
  *   linear     nu / scale: one cycle per `scale` iterations.
  *   log        log2(nu + 1) * scale: `scale` cycles per doubling of the count.
- * position += shift (a rotation of the palette, 0..1). A scale of 0 means "that mapping's default". */
+ * position += shift (a rotation of the palette, 0..1). A scale of 0 means "that mapping's default".
+ *
+ * Three more settings shape the result. gamma raises the position inside each palette cycle (0..1) to a
+ * power before the lookup, so more of the picture sits at the start (gamma > 1) or the end (gamma < 1) of
+ * the palette. brightness and contrast (-100..100) adjust the palette's colors themselves, not the interior
+ * color; see adjust_table in colorize.c. */
 enum { MAP_HISTOGRAM = 0, MAP_LINEAR = 1, MAP_LOG = 2 };
 
 void colorize_defaults(ColorOpts *o);

@@ -1,7 +1,8 @@
 /*
  * colorize: recolor raw smooth-iteration-count files (written by `mand-gpu --nu-out=`) without rendering.
  *
- *   colorize IN.nu OUT.bmp [--palette=NAME] [--mapping=...] [--scale=N] [--shift=N] [--interior=RRGGBB]
+ *   colorize IN.nu OUT.bmp [--palette=NAME] [--mapping=...] [--scale=N] [--shift=N]
+ *                          [--gamma=N] [--brightness=N] [--contrast=N] [--interior=RRGGBB]
  *   colorize --list-palettes
  *   colorize --dump-palette=NAME      one 0xRRGGBB entry per line (PALETTE_SIZE lines)
  */
@@ -48,7 +49,8 @@ int main(int argc, char **argv) {
     }
     if (nfiles != 2) {
         fprintf(stderr, "usage: colorize IN.nu OUT.bmp [--palette=NAME] [--mapping=histogram|linear|log]\n"
-                        "                [--scale=N] [--shift=N] [--interior=RRGGBB]\n"
+                        "                [--scale=N] [--shift=N] [--gamma=N] [--brightness=N] [--contrast=N]\n"
+                        "                [--interior=RRGGBB]\n"
                         "       colorize --list-palettes | --dump-palette=NAME\n");
         return 1;
     }

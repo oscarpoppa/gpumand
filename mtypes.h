@@ -13,6 +13,9 @@ typedef struct {
     int mapping;        /* MAP_HISTOGRAM, MAP_LINEAR or MAP_LOG */
     double scale;       /* 0 = the mapping's default */
     double shift;       /* rotates the palette; 1 is a full turn */
+    double gamma;       /* curve on the position inside each palette cycle; 1 = none */
+    double brightness;  /* -100..100, added to every palette color */
+    double contrast;    /* -100..100, stretches (or squeezes) the palette colors about mid-gray */
     uint32_t interior;  /* 0x00RRGGBB for pixels that never escape */
 } ColorOpts;
 

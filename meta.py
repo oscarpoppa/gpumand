@@ -16,7 +16,8 @@ MAX_EXPONENT = 5000
 PNG_SIGNATURE = b'\x89PNG\r\n\x1a\n'
 
 
-def view_text(x, y, w, multiplier, palette, mapping, scale, shift):
+def view_text(x, y, w, multiplier, palette, mapping, scale, shift, gamma=1.0, brightness=0.0, contrast=0.0,
+              interior='000000'):
     """The text fields describing a view, as {key: value}."""
     return {
         'Software': 'gpumand',
@@ -30,6 +31,10 @@ def view_text(x, y, w, multiplier, palette, mapping, scale, shift):
         PREFIX + 'mapping': str(mapping),
         PREFIX + 'scale': '{:g}'.format(float(scale)),
         PREFIX + 'shift': '{:g}'.format(float(shift)),
+        PREFIX + 'gamma': '{:g}'.format(float(gamma)),
+        PREFIX + 'brightness': '{:g}'.format(float(brightness)),
+        PREFIX + 'contrast': '{:g}'.format(float(contrast)),
+        PREFIX + 'interior': str(interior),
     }
 
 
@@ -99,7 +104,7 @@ def _float(text, name):
 
 def parse_view(text):
     """Check the text fields of a saved view and return them as a dict (x, y, w as Decimals, multiplier an int,
-    palette, mapping, scale, shift). Raises ValueError, with a message fit to show the user, if it is not a
+    palette, mapping, scale, shift, gamma, brightness, contrast, interior). Raises ValueError, with a message fit to show the user, if it is not a
     view this program saved or any field is unusable."""
     if text.get(PREFIX + 'version') is None:
         raise ValueError('this image has no saved Mandelbrot view in it (only images saved by this program do)')
@@ -126,5 +131,19 @@ def parse_view(text):
     shift = _float(text.get(PREFIX + 'shift'), 'shift')
     if scale < 0:
         raise ValueError('scale cannot be negative')
+    # fields added later: a picture saved before them simply has the plain settings
+    gamma = _float(text.get(PREFIX + 'gamma', '1'), 'gamma')
+    brightness = _float(text.get(PREFIX + 'brightness', '0'), 'brightness')
+    contrast = _float(text.get(PREFIX + 'contrast', '0'), 'contrast')
+    if not 0.1 <= gamma <= 10:
+        raise ValueError('gamma must be from 0.1 to 10')
+    if not -100 <= brightness <= 100:
+        raise ValueError('brightness must be from -100 to 100')
+    if not -100 <= contrast <= 100:
+        raise ValueError('contrast must be from -100 to 100')
+    interior = text.get(PREFIX + 'interior', '000000')
+    if len(interior) != 6 or any(c not in '0123456789abcdefABCDEF' for c in interior):
+        raise ValueError('interior color must be six hex digits')
     return {'x': x, 'y': y, 'w': w, 'multiplier': multiplier, 'palette': palette, 'mapping': mapping,
-            'scale': scale, 'shift': shift}
+            'scale': scale, 'shift': shift, 'gamma': gamma, 'brightness': brightness, 'contrast': contrast,
+            'interior': interior.lower()}
