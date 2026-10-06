@@ -176,7 +176,7 @@ int palette_build(const char *name, uint32_t *table) {
 
 /* ---- options ----------------------------------------------------------------------------------- */
 
-#define DEFAULT_PALETTE "twilight"
+#define DEFAULT_PALETTE "gray"
 
 void colorize_defaults(ColorOpts *o) {
     memset(o, 0, sizeof(*o));

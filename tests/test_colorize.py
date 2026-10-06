@@ -299,7 +299,11 @@ class Coloring(unittest.TestCase):
         self.tmp = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, self.tmp, True)
 
-    def color(self, rows, *options, check=True):
+    def color(self, rows, *options, check=True, bare=False):
+        """Colors `rows` with the tool. Unless a palette is named (or `bare`, to try the built-in default), twilight is used,
+        so tests that are about something else do not depend on which palette is the default."""
+        if not bare and not any(o.startswith('--palette') for o in options):
+            options = ('--palette=twilight',) + options
         nuf, out = os.path.join(self.tmp, 'in.nu'), os.path.join(self.tmp, 'out.bmp')
         write_nu(nuf, rows)
         res = subprocess.run([TOOL, nuf, out, *options], capture_output=True, text=True)
@@ -342,11 +346,13 @@ class Coloring(unittest.TestCase):
         self.check_mapping('linear', None, 50.0)
         self.check_mapping('log', None, 0.6)
 
-    def test_default_palette_and_mapping_are_twilight_and_histogram(self):
+    def test_default_palette_and_mapping_are_gray_and_histogram(self):
         rows = self.values()
-        _, _, plain = self.color(rows)
-        _, _, explicit = self.color(rows, '--palette=twilight', '--mapping=histogram', '--scale=2.5')
+        _, _, plain = self.color(rows, bare=True)
+        _, _, explicit = self.color(rows, '--palette=gray', '--mapping=histogram', '--scale=2.5')
         self.assertEqual(plain, explicit)
+        _, _, twilight = self.color(rows)
+        self.assertNotEqual(plain, twilight)
 
     def test_interior_pixels_get_the_interior_color(self):
         rows = self.values()

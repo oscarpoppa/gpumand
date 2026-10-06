@@ -63,7 +63,6 @@ def take(self):
     window, reg = G['window'], G['reg']
     window.resize(1900, 1150)
     QtWidgets.QApplication.processEvents()
-    G['pal_box'].setCurrentText('twilight')
     for w in STEPS:
         with localcontext() as ctx:
             ctx.prec = 60

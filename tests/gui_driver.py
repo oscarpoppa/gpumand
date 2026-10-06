@@ -205,7 +205,7 @@ def drive():
         first = [c.split() for c in calls() if c.strip() and 'mandapp0.bmp' in c][0]    # (the start-up render comes before it)
         check('mand-gpu called with x y w file multiplier', len(first) >= 5 and Decimal(first[0]) == Decimal('-1.75') and Decimal(first[2]) == 2, first)
         check('mand-gpu is told the color settings and where to save the counts',
-              '--palette=twilight' in first and '--mapping=histogram' in first and any(f.startswith('--nu-out=') for f in first), first)
+              '--palette=gray' in first and '--mapping=histogram' in first and any(f.startswith('--nu-out=') for f in first), first)
 
     # -- the dial's choice reaches the renderer and is remembered with the view
     g['iter_dial'].setValue(5)
@@ -308,7 +308,7 @@ def drive():
     pal, mapping, scale, shift = g['pal_box'], g['map_box'], g['scale_box'], g['shift_box']
     names = {pal.itemText(i) for i in range(pal.count())}
     check('palette list offers the styles', {'twilight', 'fire', 'classic', 'rainbow'} <= names, names)
-    check('default palette is twilight and mapping histogram', pal.currentText() == 'twilight' and mapping.currentText() == 'histogram')
+    check('default palette is gray and mapping histogram', pal.currentText() == 'gray' and mapping.currentText() == 'histogram')
     if not REAL:
         shown = len(dialogs)
         pal.setCurrentText('ice')                      # nothing saved to recolor: must be harmless
@@ -336,7 +336,7 @@ def drive():
         nu_file = item.fname + '.nu'
         check('a render saves its smooth counts', os.path.exists(nu_file), nu_file)
         check('the render used the default palette', open(g['image_path'](item), 'rb').read() ==
-              make_expected(nu_file, '--palette=twilight', '--mapping=histogram'))
+              make_expected(nu_file, '--palette=gray', '--mapping=histogram'))
         mtime, entries, icons = os.path.getmtime(nu_file), len(list(MAP)), icon_pixels(item)
 
         pix = os.path.join(tmp, 'pix')
@@ -1286,7 +1286,7 @@ def drive():
                 exact(g, 'xbox'), exact(g, 'ybox'), exact(g, 'wbox'))
     g['on_reset']()
     starting = everything()
-    check('the starting position is the documented one', starting[:10] == ('twilight', 'histogram', 0.0, 0.0, 1.0, 0.0, 0.0, '000000', 0, 0), starting)
+    check('the starting position is the documented one', starting[:10] == ('gray', 'histogram', 0.0, 0.0, 1.0, 0.0, 0.0, '000000', 0, 0), starting)
 
     def disturb():
         pal.setCurrentText('fire')
