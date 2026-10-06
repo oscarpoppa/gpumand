@@ -19,6 +19,14 @@ typedef struct {
     uint32_t interior;  /* 0x00RRGGBB for pixels that never escape */
 } ColorOpts;
 
+/* Which function is iterated (see funcspec.h). Zero-filled is the built-in z^2 + c. */
+#define FUNC_MANDELBROT 0   /* z^2 + c, with its own hand-written paths */
+#define FUNC_POWER 1        /* z^degree + c */
+typedef struct {
+    int kind;
+    int degree;             /* FUNC_POWER: the exponent */
+} FuncSpec;
+
 typedef struct {
     Complex lleft;
     char filename[256];
@@ -26,6 +34,7 @@ typedef struct {
     char nuout[256];    /* optional: also write the raw smooth iteration counts here */
     uint32_t interleave;
     ColorOpts color;
+    FuncSpec func;
 } RunStart;
 
 typedef struct {

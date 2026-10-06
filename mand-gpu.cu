@@ -76,6 +76,11 @@ int main(int argc, char **argv) {
     Bla *blahost = NULL, *dev_bla_ptr = NULL;
     RefHeader rh;
     RunStart *init = get_coords(argc, argv);
+    if (init->func.kind != FUNC_MANDELBROT) {
+        /* drawing other functions needs kernels that are not written yet: say so rather than draw z^2 */
+        fprintf(stderr, "mand-gpu: --func is not supported by the GPU renderer yet (use mand-cpu)\n");
+        return 1;
+    }
     istruct.llft.x = init->lleft.real;
     istruct.llft.y = init->lleft.imag;
     istruct.ledg = init->lleft.length;

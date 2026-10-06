@@ -167,8 +167,9 @@ real renderer.
 | | |
 |---|---|
 | `mand-gui.py` | The window. |
-| `mand-gpu.cu`, `mand-cpu.c` | The GPU and CPU renderers. They share `pert.h` (the per-pixel code), `bla.c`, `colorize.c`, `refio.c`. |
+| `mand-gpu.cu`, `mand-cpu.c` | The GPU and CPU renderers. They share `pert.h` (the per-pixel code), `bla.c`, `colorize.c`, `refio.c`, `funcspec.c`. |
 | `deepzoom.py` | Reference orbits and exact coordinate math. |
+| `funcspec.c`, `funcspec.h`, `funcspec.py` | The small file that tells a renderer which function to draw (`--func=FILE`); so far z^d + c for whole d from 2 to 64, in `mand-cpu` only. |
 | `colorize-main.c`, `colorize.c` | Palettes, mappings, and the recolor tool. |
 | `meta.py` | The view description stored inside saved PNGs. |
 | `cleanup.py` | Which files the program may remove, and how. |

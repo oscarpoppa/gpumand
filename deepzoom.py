@@ -42,6 +42,8 @@ def read_define(header, name):
 
 ITERATIONS = read_define('iter.h', 'ITERATIONS')
 BAILOUT2 = read_define('iter.h', 'BAILOUT2')
+POWER_MIN_DEGREE = read_define('iter.h', 'POWER_MIN_DEGREE')
+POWER_MAX_DEGREE = read_define('iter.h', 'POWER_MAX_DEGREE')
 WIDTH = read_define('aspect.h', 'WIDTH')
 HEIGHT = read_define('aspect.h', 'HEIGHT')
 
@@ -100,11 +102,26 @@ def selection_to_region(x, y, w, pixx, pixy, pixw, pixwid, pixhgt):
 MAX_REFERENCE = (1 << 24) - 1     # longest reference orbit the renderers load (refio.h MAX_REF_POINTS, less the start)
 
 
-def reference_orbit(x, y, w, maxiter):
-    """Orbit of the view's center, as an array('d') of re, im, re, im, ...
+def _power(zr, zi, d):
+    """(zr + i zi)^d for a whole d >= 1 by repeated squaring, at the current mpfr precision."""
+    ar, ai = gmpy2.mpfr(1), gmpy2.mpfr(0)
+    br, bi = zr, zi
+    while d > 0:
+        if d & 1:
+            ar, ai = ar * br - ai * bi, ar * bi + ai * br
+        d >>= 1
+        if d:
+            br, bi = br * br - bi * bi, 2 * br * bi
+    return ar, ai
+
+
+def reference_orbit(x, y, w, maxiter, degree=2):
+    """Orbit of the view's center, as an array('d') of re, im, re, im, ...  for z -> z^degree + c.
 
     The orbit is cut off at MAX_REFERENCE steps however high the iteration limit is: a pixel that outlasts the
     reference starts over from it (rebasing), so very large limits need no longer orbit."""
+    if not POWER_MIN_DEGREE <= degree <= POWER_MAX_DEGREE:
+        raise ValueError('the degree must be from %d to %d' % (POWER_MIN_DEGREE, POWER_MAX_DEGREE))
     maxiter = min(maxiter, MAX_REFERENCE)
     x, y, w = Decimal(x), Decimal(y), Decimal(w)
     bits = max(128, int(-w.adjusted() * 3.33) + 192)
@@ -115,7 +132,11 @@ def reference_orbit(x, y, w, maxiter):
         ci = gmpy2.mpfr(str(y)) + mw * HEIGHT / (2 * WIDTH)
         zr = zi = gmpy2.mpfr(0)
         for _ in range(maxiter):
-            zr, zi = zr * zr - zi * zi + cr, 2 * zr * zi + ci
+            if degree == 2:
+                zr, zi = zr * zr - zi * zi + cr, 2 * zr * zi + ci
+            else:
+                pr, pi = _power(zr, zi, degree)
+                zr, zi = pr + cr, pi + ci
             fr, fi = float(zr), float(zi)
             out.append(fr)
             out.append(fi)
@@ -135,8 +156,8 @@ def pixel_step(w):
     return float(mant), int(exp)
 
 
-def write_reference(path, x, y, w, maxiter):
-    orbit = reference_orbit(x, y, w, maxiter)
+def write_reference(path, x, y, w, maxiter, degree=2):
+    orbit = reference_orbit(x, y, w, maxiter, degree)
     mant, exp = pixel_step(w)
     if sys.byteorder == 'big':
         orbit.byteswap()
@@ -157,7 +178,8 @@ def read_reference(path):
 
 
 if __name__ == '__main__':
-    if len(sys.argv) != 6:
-        sys.stderr.write('Usage: deepzoom.py x y width maxiter outfile\n')
+    if len(sys.argv) not in (6, 7):
+        sys.stderr.write('Usage: deepzoom.py x y width maxiter outfile [degree]\n')
         sys.exit(1)
-    write_reference(sys.argv[5], sys.argv[1], sys.argv[2], sys.argv[3], int(sys.argv[4]))
+    write_reference(sys.argv[5], sys.argv[1], sys.argv[2], sys.argv[3], int(sys.argv[4]),
+                    int(sys.argv[6]) if len(sys.argv) == 7 else 2)

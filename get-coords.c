@@ -1,12 +1,14 @@
 #include "mtypes.h"
 #include "colorize.h"
+#include "funcspec.h"
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
 
 #define USAGE "Arguments: llreal llimag width filename interleave [reference_orbit_file] [options]\n" \
               "Options: --palette=NAME --mapping=histogram|linear|log --scale=N --shift=N --gamma=N --brightness=N --contrast=N --interior=RRGGBB\n" \
-              "         --nu-out=FILE (also save the raw smooth iteration counts for recoloring)\n"
+              "         --nu-out=FILE (also save the raw smooth iteration counts for recoloring)\n" \
+              "         --func=FILE (draw the function described in FILE, e.g. z^3 + c, instead of z^2 + c)\n"
 
 static void usage_error(const char *why, const char *what) {
     if (why)
@@ -32,6 +34,11 @@ RunStart *get_coords(int argc, char *argv[]) {
                 if (strlen(argv[i] + 9) == 0 || strlen(argv[i] + 9) >= sizeof(ret->nuout))
                     usage_error("bad --nu-out file name", NULL);
                 strcpy(ret->nuout, argv[i] + 9);
+                continue;
+            }
+            if (!strncmp(argv[i], "--func=", 7)) {
+                if (funcspec_load(argv[i] + 7, &ret->func, err, sizeof(err)))
+                    usage_error(err, NULL);
                 continue;
             }
             const int r = colorize_parse_option(&ret->color, argv[i], err, sizeof(err));
