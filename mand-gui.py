@@ -125,7 +125,7 @@ VIEW_COLORS = {}
 
 Colors = namedtuple('Colors', ('palette', 'mapping', 'scale', 'shift', 'gamma', 'brightness', 'contrast', 'interior'))
 INTERIOR_DEFAULT = '000000'
-DEFAULT_COLORS = Colors('twilight', 'histogram', 0.0, 0.0, 1.0, 0.0, 0.0, INTERIOR_DEFAULT)     # how every color control starts
+DEFAULT_COLORS = Colors('gray', 'histogram', 0.0, 0.0, 1.0, 0.0, 0.0, INTERIOR_DEFAULT)     # how every color control starts
 
 
 def current_colors():
@@ -952,7 +952,7 @@ if __name__ == '__main__':
     on_inter_changed(inter.currentIndex())
     pal_box = QComboBox()
     pal_box.addItems(palette_names())
-    pal_box.setCurrentText('twilight')
+    pal_box.setCurrentText(DEFAULT_COLORS.palette)
     pal_box.setToolTip('Color scheme')
     map_box = QComboBox()
     map_box.addItems(MAPPINGS)

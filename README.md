@@ -80,7 +80,7 @@ the first digits, the last digits and the power of ten. Hover over a box to see 
 
 ### Colors
 
-The colors blend smoothly from one to the next, with no visible bands or steps. There are nine palettes:
+The colors blend smoothly from one to the next, with no visible bands or steps. There are nine palettes, and the program starts with `gray`:
 
 ![The same view in each of the nine palettes](docs/images/palettes.png)
 
