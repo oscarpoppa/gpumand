@@ -71,8 +71,7 @@ Run it:
 | Iterations dial / Multiplier | The most iterations a render may use is 2000 times the multiplier, up to 20 million (40 billion iterations). More iterations fill in black areas of deep views but take longer. At the top of the range a view with much of its area inside the set can take hours, because every inside pixel runs to the full limit, and the window stays busy until the render finishes. |
 | Colors | Palette, mapping, Scale and Shift. Each change repaints at once. The **Restore** buttons put Scale and Shift back to their starting values. |
 
-The picture grows with the window. If the window's shape doesn't match, up to 15% of the picture is trimmed from the edges rather than
-stretching it. The coordinate boxes show long numbers in short form, such as `-0.743643887...6114774` and `1.23456789...8901234e-45`:
+The coordinate boxes show long numbers in short form, such as `-0.743643887...6114774` and `1.23456789...8901234e-45`:
 the first digits, the last digits and the power of ten. Hover over a box to see every digit.
 
 ### Colors
