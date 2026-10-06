@@ -86,11 +86,23 @@ and three **mappings** that decide how counts become colors:
 ![histogram, linear and log mappings of the same view](docs/images/mappings.png)
 
 * `histogram` (the default) spreads the colors evenly over whatever is in the picture, at any depth.
-* `linear` gives a fixed number of iterations per color cycle (Scale sets the number).
+* `linear` gives each cycle of the palette a fixed number of iterations.
 * `log` cycles the colors once per doubling of the iteration count.
 
-**Scale** sets how fast the colors cycle (blank means a good value for the mapping). **Shift** slides every color around the palette
-without changing the pattern; 1 is one full turn, which looks the same as 0.
+**Scale** sets how many times the palette repeats, and what it measures depends on the mapping:
+
+| Mapping | Scale means | Starting value | A bigger Scale gives |
+|---|---|---|---|
+| `histogram` | times the palette repeats across the picture | 2.5 | more repeats (busier) |
+| `linear` | iterations in one repeat of the palette | 50 | fewer repeats (calmer) |
+| `log` | repeats of the palette per doubling of the iteration count | 0.6 | more repeats (busier) |
+
+The box shows `default` until you type a number, and `default` uses the built-in starting value for the mapping you have chosen (the table
+above), so it changes when you change the mapping. The **Restore** button beside the box puts Scale back to `default`.
+
+**Shift** adds an offset to the position of every color along the palette. Every color moves along it by the same amount, so the colors change
+but the pattern does not. It is measured in palette lengths: for example 0.25 moves each color a quarter of the way along the palette, and 0.5
+moves it halfway. The **Restore** button beside the box puts Shift back to its starting value.
 
 ### Saving, reopening and cleaning up
 
