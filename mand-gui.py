@@ -133,6 +133,25 @@ def current_colors():
                   brightness_box.value(), contrast_box.value(), interior_hex())
 
 
+def remember(fname):
+    """Record what the controls now show as the color settings of this view (what its picture was last drawn with)."""
+    VIEW_COLORS[fname] = current_colors()
+
+
+def recorded(fname):
+    """The color settings recorded for this view, or None if it has none."""
+    return VIEW_COLORS.get(fname)
+
+
+def forget(fname):
+    VIEW_COLORS.pop(fname, None)
+
+
+def forget_all_but(keep):
+    for key in [k for k in VIEW_COLORS if k != keep]:
+        del VIEW_COLORS[key]
+
+
 def interior_hex():
     return interior_btn.property('hex')
 
@@ -180,7 +199,7 @@ def choose_interior():
 
 def view_meta(item):
     """The text fields describing a view, for its PNG."""
-    colors = VIEW_COLORS.get(item.fname) or current_colors()
+    colors = recorded(item.fname) or current_colors()
     x, y, w, d = item.xywd
     return view_text(x, y, w, MULTIPLIERS[int(d)], *colors)
 
@@ -260,7 +279,7 @@ def recolor(item):
         return False
     os.replace(new, out)
     SHOWN[item.fname] = out
-    VIEW_COLORS[item.fname] = current_colors()
+    remember(item.fname)
     item.icon.setIcon(QIcon(load_pixmap(out)))
     return True
 
@@ -697,8 +716,8 @@ def fset(item):
     reg.cand_xyw.w = item.xywd.w
     reg.cand_xyw.d = int(item.xywd.d)
     inter.setCurrentIndex(int(item.xywd.d))
-    if item.fname in VIEW_COLORS:               # every control describes this view, not whatever was used before
-        set_color_controls(*VIEW_COLORS[item.fname])
+    if recorded(item.fname):                    # every control describes this view, not whatever was used before
+        set_color_controls(*recorded(item.fname))
     reg.setPixmap(load_pixmap(image_path(item)))
     for mem in MAP:
         mem.icon.setFlat(True)
@@ -736,7 +755,7 @@ def on_delete_view(fname):
         item.icon.setParent(None)
         item.icon.deleteLater()
         SHOWN.pop(item.fname, None)
-        VIEW_COLORS.pop(item.fname, None)
+        forget(item.fname)
         fset(parent)
     if failed:
         QMessageBox.warning(window, 'Delete view', '{} files could not be deleted.'.format(failed))
@@ -753,11 +772,10 @@ def on_reset():
             scr_layout.itemAt(i).widget().setParent(None)
         for key in [k for k in SHOWN if k != STARTFILE]:
             del SHOWN[key]       # those file names will be rendered afresh
-        for key in [k for k in VIEW_COLORS if k != STARTFILE]:
-            del VIEW_COLORS[key]
+        forget_all_but(STARTFILE)
         # every control goes back to its starting position, and the opening view is drawn to match
         set_color_controls(*DEFAULT_COLORS)
-        VIEW_COLORS[STARTFILE] = current_colors()
+        remember(STARTFILE)
         if INITPG.xywd.d != 0:          # the opening view was redrawn with more iterations: draw it afresh with the starting ones
             INITPG = INITPG._replace(xywd=INITPG.xywd._replace(d=0))
             SHOWN.pop(STARTFILE, None)
@@ -812,7 +830,7 @@ def rerender_in_place(item, xval, yval, wval, ival):
     os.replace(out + '.new', out)
     os.replace(nu + '.new', nu)
     SHOWN[item.fname] = out
-    VIEW_COLORS[item.fname] = current_colors()
+    remember(item.fname)
     item = MAP.update(item, inter.currentIndex())
     item.icon.setIcon(QIcon(load_pixmap(out)))
     fset(item)
@@ -836,7 +854,7 @@ def on_run():
             if not problem:
                 SHOWN.pop(MAP.fname, None)      # a fresh render replaces any earlier recoloring of this file name
                 MAP.add(XYWD(reg.cand_xyw.x, reg.cand_xyw.y, reg.cand_xyw.w, int(reg.cand_xyw.d)))
-                VIEW_COLORS[MAP.curr.fname] = current_colors()
+                remember(MAP.curr.fname)
                 scr_layout.insertWidget(0, MAP.curr.icon)
                 fset(MAP.curr)
         if problem:
@@ -1128,7 +1146,7 @@ if __name__ == '__main__':
     window.setLayout(wholescr) 
     window.setWindowTitle(TITLE)
     window.setStyleSheet(DARK_STYLE)
-    VIEW_COLORS[STARTFILE] = current_colors()      # the opening view's settings are the starting ones
+    remember(STARTFILE)                            # the opening view's settings are the starting ones
     ensure_start_image()
     fset(MAP.curr)
     # fit the layout (it can be enlarged; the fields grow with the window)

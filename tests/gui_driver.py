@@ -762,6 +762,7 @@ def drive():
           g['scr_layout'].count() == thumbs_before and asked and asked[-1][0] == len(b_files) and asked[-1][1] > 0, asked)
     g['confirm_delete'] = lambda parent, count, size: True
     other_files = view_files(pix, A.fname) + view_files(pix, C.fname)
+    had_record = B.fname in g['VIEW_COLORS']
     B.icon.closer.click()
     check('deleting removes the view from the history', MAP[B.fname] is None and len(list(MAP)) == 3,
           [i.fname for i in MAP])
@@ -769,6 +770,9 @@ def drive():
     check('...but no other view\'s files and nothing that only looks similar',
           all(os.path.exists(f) for f in other_files + guards), [f for f in other_files + guards if not os.path.exists(f)])
     check('...and its thumbnail', g['scr_layout'].count() == thumbs_before - 1 and B.icon.parent() is None)
+    check('...and the settings recorded for it, but not another view\'s',
+          had_record and B.fname not in g['VIEW_COLORS'] and A.fname in g['VIEW_COLORS'] and C.fname in g['VIEW_COLORS'],
+          (had_record, sorted(os.path.basename(k) for k in g['VIEW_COLORS'])))
     check('the view before it is shown instead', MAP.curr.fname == A.fname and Decimal(exact(g, 'wbox')) == Decimal(A.xywd.w), MAP.curr.fname)
     check('the x moved to the newly selected thumbnail', A.icon.closer.isVisible() and not C.icon.closer.isVisible())
     check('the view that was zoomed from the deleted one now hangs from its parent', MAP[C.fname].parent == A.fname, MAP[C.fname].parent)
