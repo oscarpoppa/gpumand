@@ -5,7 +5,7 @@
 #include <stdlib.h>
 
 #define USAGE "Arguments: llreal llimag width filename interleave [reference_orbit_file] [options]\n" \
-              "Options: --palette=NAME --mapping=histogram|linear|log --scale=N --shift=N --interior=RRGGBB\n" \
+              "Options: --palette=NAME --mapping=histogram|linear|log --scale=N --shift=N --gamma=N --brightness=N --contrast=N --interior=RRGGBB\n" \
               "         --nu-out=FILE (also save the raw smooth iteration counts for recoloring)\n"
 
 static void usage_error(const char *why, const char *what) {

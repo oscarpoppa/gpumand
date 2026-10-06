@@ -7,7 +7,7 @@
  * with BLA, floatexp), sharing the per-pixel code in pert.h. Rows are spread over threads with
  * OpenMP; set OMP_NUM_THREADS to control how many, and MAND_VERBOSE=1 to have it say which path
  * it took on stderr. Pixels are computed as smooth iteration counts and colored on the host
- * (colorize.h); options: --palette --mapping --scale --shift --interior, and --nu-out=FILE to also
+ * (colorize.h); options: --palette --mapping --scale --shift --gamma --brightness --contrast --interior, and --nu-out=FILE to also
  * save the raw counts so `colorize` can recolor the image without rendering again.
  */
 #include <stdio.h>

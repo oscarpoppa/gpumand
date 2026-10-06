@@ -51,6 +51,10 @@ def take(self):
         G['inter'].setCurrentIndex(2)
         G['on_run']()
         QtWidgets.QApplication.processEvents()
+    G['split'].setSizes([700, 250])         # give the controls most of the column so the whole Colors box shows
+    QtWidgets.QApplication.processEvents()
+    G['controls_scroll'].verticalScrollBar().setValue(G['controls_scroll'].verticalScrollBar().maximum())
+    QtWidgets.QApplication.processEvents()
     window.grab().save(OUT, 'PNG')
     shutil.rmtree(tmp, ignore_errors=True)
     return 0

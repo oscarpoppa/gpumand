@@ -143,13 +143,15 @@ def drive():
     xs = {pos(n).x() for n in ('xbox', 'ybox', 'wbox')}
     check('coordinate boxes line up in one column', len(xs) == 1, xs)
     run_pos = g['run'].mapTo(window, QtCore.QPoint(0, 0))
-    check('the buttons sit under the coordinate boxes', run_pos.y() > pos('wbox').y(), (run_pos, pos('wbox')))
+    check('the buttons sit above the coordinate boxes, where they stay in view whichever part of the column is open',
+          run_pos.y() < pos('xbox').y(), (run_pos, pos('xbox')))
     ip = g['reg'].mapTo(window, QtCore.QPoint(0, 0))
     row = [g[n].mapTo(window, QtCore.QPoint(0, 0)) for n in ('run', 'back', 'save', 'reset')]
     check('Run, Back, Save and Reset are in one row in that order', len({p.y() for p in row}) == 1 and
           [p.x() for p in row] == sorted(p.x() for p in row), row)
     check('the buttons are small and fit the column', all(g[n].width() < 80 for n in ('reset', 'run', 'back', 'save')) and
-          row[3].x() + g['reset'].width() <= pos('xbox').x() + g['xbox'].width() + 2, [g[n].width() for n in ('reset', 'run', 'back', 'save')])
+          row[3].x() + g['reset'].width() <= g['side'].mapTo(window, QtCore.QPoint(0, 0)).x() + g['side'].width() + 2,
+          [g[n].width() for n in ('reset', 'run', 'back', 'save')])
     check('the picture has the whole window height', g['reg'].height() >= window.height() - 20, (g['reg'].height(), window.height()))
     side_x = g['side'].mapTo(window, QtCore.QPoint(0, 0)).x()
     check('all the controls are in one column right of the picture', ip.x() + g['reg'].width() <= side_x and
@@ -599,6 +601,34 @@ def drive():
     g['restore_scale_btn'].click()
     g['restore_shift_btn'].click()
     check('Restore when already at the defaults is harmless', g['scale_box'].value() == 0.0 and g['shift_box'].value() == 0.0)
+    # Scale's arrows step finely, by an amount that suits the mapping
+    sbox, mbox = g['scale_box'], g['map_box']
+    for name, start, step in (('histogram', 2.5, 0.05), ('linear', 50.0, 0.5), ('log', 0.6, 0.01)):
+        mbox.setCurrentText(name)
+        check('Scale steps by %g for the %s mapping' % (step, name), abs(sbox.singleStep() - step) < 1e-12, sbox.singleStep())
+        sbox.setValue(0.0)
+        sbox.stepUp()
+        check('the first up-click from "default" goes one step above the %s default' % name, abs(sbox.value() - (start + step)) < 1e-9, sbox.value())
+        sbox.setValue(0.0)
+        sbox.stepDown()
+        check('the first down-click from "default" goes one step below the %s default' % name, abs(sbox.value() - (start - step)) < 1e-9, sbox.value())
+        sbox.stepUp()
+        sbox.stepUp()
+        check('later clicks move by one step each', abs(sbox.value() - (start + step)) < 1e-9, sbox.value())
+        sbox.stepBy(10)
+        check('Page Up moves ten steps', abs(sbox.value() - (start + 11 * step)) < 1e-9, sbox.value())
+    sbox.setValue(0.0)
+    mbox.setCurrentText('histogram')
+    sbox.setValue(2.555)
+    check('Scale keeps three decimals', abs(sbox.value() - 2.555) < 1e-9 and sbox.text() == '2.555', (sbox.value(), sbox.text()))
+    sbox.setValue(0.05)
+    sbox.stepDown()
+    check('stepping down to zero shows "default" again', sbox.value() == 0.0 and sbox.text() == 'default', (sbox.value(), sbox.text()))
+    # showing another view brings that view's mapping, and with it the right step
+    g['set_color_controls']('fire', 'linear', 0.0, 0.0)
+    check('showing a view with another mapping changes the step to suit it', abs(sbox.singleStep() - 0.5) < 1e-12, sbox.singleStep())
+    g['set_color_controls']('twilight', 'histogram', 0.0, 0.0)
+    sbox.setValue(0.0)
     saved_png = os.path.join(saves, 'view.png')
     g['on_reset']()
     release(g, 300, 500, 600)
@@ -819,8 +849,8 @@ def drive():
     check('the two views have different color settings and different multipliers', rec[V1.fname] != rec[V2.fname] and V1.xywd.d != V2.xywd.d,
           (rec[V1.fname], rec[V2.fname]))
     if REAL:        # with the real recolorer the records are exactly what was last applied to each picture
-        check('each view\'s record is what its picture was last given', rec[V1.fname] == ('ice', 'linear', 0.0, -0.5) and
-              rec[V2.fname] == ('gray', 'histogram', 7.0, 0.9), (rec[V1.fname], rec[V2.fname]))
+        check('each view\'s record is what its picture was last given', rec[V1.fname][:4] == ('ice', 'linear', 0.0, -0.5) and
+              rec[V2.fname][:4] == ('gray', 'histogram', 7.0, 0.9), (rec[V1.fname], rec[V2.fname]))
     V1.icon.click()
     got, want = shows(V1)
     check('selecting a view shows ITS palette, mapping, scale, shift, multiplier, dial and coordinates', got == want and got['multiplier'] == 2,
@@ -871,7 +901,7 @@ def drive():
     set_controls('aurora', 'linear', 9.0, 0.3, 5)
     g['INITPG'].icon.click()
     got = (pal.currentText(), mapping.currentText(), scale.value(), shift.value(), g['inter'].currentIndex())
-    check('selecting the opening view shows its own settings', got == (*rec[g['STARTFILE']], int(g['INITPG'].xywd.d)) and got[0] != 'aurora' and got[4] != 5, got)
+    check('selecting the opening view shows its own settings', got == (*rec[g['STARTFILE']][:4], int(g['INITPG'].xywd.d)) and got[0] != 'aurora' and got[4] != 5, got)
     release(g, 300, 500, 600)
     g['on_run']()
     S0 = MAP.curr
@@ -932,6 +962,319 @@ def drive():
         box.setCurrentText(value)
     scale.setValue(0.0)
     shift.setValue(0.0)
+
+    # -- gamma, brightness, contrast and the interior color: controls, recoloring, the renderer, PNGs, per-view settings
+    pal, mapping, scale, shift = g['pal_box'], g['map_box'], g['scale_box'], g['shift_box']
+    gamma, bright, contrast, interior = g['gamma_box'], g['brightness_box'], g['contrast_box'], g['interior_btn']
+    group = g['color_group']
+    g['on_reset']()
+    for box in (pal, mapping, scale, shift):
+        box.blockSignals(True)
+    pal.setCurrentText('twilight')
+    mapping.setCurrentText('histogram')
+    scale.setValue(0.0)
+    shift.setValue(0.0)
+    for box in (pal, mapping, scale, shift):
+        box.blockSignals(False)
+    check('the new colors controls start at the plain settings', (gamma.value(), bright.value(), contrast.value(), g['interior_hex']()) ==
+          (1.0, 0.0, 0.0, '000000'), (gamma.value(), bright.value(), contrast.value(), g['interior_hex']()))
+    check('the new controls are in the Colors box, each with a Restore button on its row',
+          all(g[n].parent() is group for n in ('gamma_box', 'brightness_box', 'contrast_box', 'interior_btn', 'restore_gamma_btn',
+                                               'restore_brightness_btn', 'restore_contrast_btn', 'restore_interior_btn')) and
+          all(abs(pos_row(r).y() + g[r].height() // 2 - pos_row(b).y() - g[b].height() // 2) <= 3 and pos_row(r).x() >= pos_row(b).x() + g[b].width() - 2
+              for b, r in (('gamma_box', 'restore_gamma_btn'), ('brightness_box', 'restore_brightness_btn'),
+                           ('contrast_box', 'restore_contrast_btn'), ('interior_btn', 'restore_interior_btn'))),
+          [pos_row(n) for n in ('gamma_box', 'restore_gamma_btn', 'interior_btn', 'restore_interior_btn')])
+    check('every Colors row fits inside the column (nothing is cut off at the right)',
+          all(g[n].mapTo(window, QtCore.QPoint(g[n].width(), 0)).x() <= g['controls_scroll'].mapTo(window, QtCore.QPoint(g['controls_scroll'].width(), 0)).x()
+              for n in ('restore_scale_btn', 'restore_gamma_btn', 'restore_brightness_btn', 'restore_contrast_btn', 'restore_interior_btn', 'xbox', 'open_btn')),
+          g['controls_scroll'].width())
+    check('the ranges are the ones the program accepts', (gamma.minimum(), gamma.maximum(), bright.minimum(), bright.maximum(),
+                                                         contrast.minimum(), contrast.maximum()) == (0.1, 10.0, -100.0, 100.0, -100.0, 100.0))
+
+    # picking an interior color: the program's own color dialog is replaced by one that answers
+    real_getcolor = g['QColorDialog'].getColor
+    answers = []
+
+    def pick(hexcolor):
+        answers.append(hexcolor)
+        g['QColorDialog'].getColor = staticmethod(lambda *a, **k: QtGui.QColor('#' + hexcolor) if hexcolor else QtGui.QColor())
+
+    recolors = []
+    real_recolor = g['recolor']
+    g['recolor'] = lambda item: (recolors.append(item.fname), real_recolor(item))[1]
+    pick('102030')
+    interior.click()
+    check('choosing an interior color shows it on the button', g['interior_hex']() == '102030' and interior.text() == '#102030' and
+          '#102030' in interior.styleSheet().lower(), (g['interior_hex'](), interior.text(), interior.styleSheet()))
+    check('and recolors the view once', recolors == [MAP.curr.fname], recolors)
+    pick('')                                        # the dialog was cancelled
+    del recolors[:]
+    interior.click()
+    check('cancelling the color dialog changes nothing', g['interior_hex']() == '102030' and not recolors, (g['interior_hex'](), recolors))
+    pick('102030')
+    interior.click()
+    check('choosing the color that is already set recolors nothing', not recolors, recolors)
+    g['restore_interior_btn'].click()
+    check('Restore beside Interior puts it back to black, recoloring once', g['interior_hex']() == '000000' and interior.text() == '#000000' and
+          len(recolors) == 1, (g['interior_hex'](), recolors))
+    del recolors[:]
+    g['restore_interior_btn'].click()
+    check('Restore beside Interior when already black does nothing', not recolors, recolors)
+    g['QColorDialog'].getColor = real_getcolor
+    g['recolor'] = real_recolor
+
+    # the real color dialog: a click on its color spectrum must set the interior, even when it starts out black
+    # (the dialog takes brightness from its slider, so opened on black every spectrum click would give black again)
+    def with_dialog(act):
+        seen = {}
+
+        def run():
+            box = QtWidgets.QApplication.activeModalWidget()
+            seen['start'] = box.currentColor().name()
+            act(box)
+        QtCore.QTimer.singleShot(400, run)
+        interior.click()
+        return seen
+
+    def spectrum(box):
+        found = [c for c in box.findChildren(QtWidgets.QWidget) if c.metaObject().className() == 'QColorPicker'][0]
+        QtTest.QTest.mouseClick(found, QtCore.Qt.LeftButton, pos=QtCore.QPoint(found.width() // 3, found.height() // 3))
+        return box.currentColor().name()
+
+    def press(box, label):
+        [b for b in box.findChildren(QtWidgets.QPushButton) if b.text().replace('&', '') == label][0].click()
+
+    del recolors[:]
+    g['recolor'] = lambda item: (recolors.append(item.fname), real_recolor(item))[1]
+    picked = []
+    seen = with_dialog(lambda box: (picked.append(spectrum(box)), press(box, 'OK')))
+    check('the color dialog does not open on black', seen['start'] != '#000000', seen)
+    check('clicking its spectrum and OK sets the interior', g['interior_hex']() == picked[0][1:] != '000000' and interior.text() == picked[0], (picked, g['interior_hex']()))
+    check('and recolors the view once', recolors == [MAP.curr.fname], recolors)
+    chosen_before = g['interior_hex']()
+    seen = with_dialog(lambda box: (spectrum(box), press(box, 'Cancel')))
+    check('the dialog opens on the interior color when that is not black', seen['start'] == '#' + chosen_before, (seen, chosen_before))
+    check('clicking the spectrum and then Cancel changes nothing', g['interior_hex']() == chosen_before, g['interior_hex']())
+    g['restore_interior_btn'].click()
+    del recolors[:]
+    g['recolor'] = real_recolor
+
+    # each Restore button puts back its own control only
+    for box, value, restore, plain in ((gamma, 2.5, 'restore_gamma_btn', 1.0), (bright, 30.0, 'restore_brightness_btn', 0.0),
+                                       (contrast, -40.0, 'restore_contrast_btn', 0.0)):
+        for other in (gamma, bright, contrast):
+            other.setValue({gamma: 1.5, bright: -20.0, contrast: 25.0}[other])
+        box.setValue(value)
+        g[restore].click()
+        left = {gamma: 1.5, bright: -20.0, contrast: 25.0}
+        left[box] = plain
+        check('%s puts back only its own control' % restore, (gamma.value(), bright.value(), contrast.value()) ==
+              (left[gamma], left[bright], left[contrast]), (gamma.value(), bright.value(), contrast.value()))
+    for box in (gamma, bright, contrast):
+        box.setValue(1.0 if box is gamma else 0.0)
+
+    # the settings reach the renderer (only the ones that are not plain), in a render and in a redraw
+    gamma.setValue(1.5)
+    bright.setValue(-20.0)
+    contrast.setValue(30.0)
+    g['show_interior']('102030')
+    release(g, 300, 500, 600)
+    g['on_run']()
+    colored = MAP.curr
+    if not REAL:
+        line = [c.split() for c in calls() if c.strip() and c.split()[0] != 'REF_EXISTED'][-1]
+        check('the renderer is told gamma, brightness, contrast and interior', {'--gamma=1.5', '--brightness=-20', '--contrast=30', '--interior=102030'} <= set(line), line)
+        gamma.setValue(1.0)
+        bright.setValue(0.0)
+        contrast.setValue(0.0)
+        g['show_interior']('000000')
+        g['inter'].setCurrentIndex(MAP.curr.xywd.d)
+        g['on_run']()
+        line = [c.split() for c in calls() if c.strip() and c.split()[0] != 'REF_EXISTED'][-1]
+        check('plain settings are not passed at all', not [a for a in line if a.startswith(('--gamma', '--brightness', '--contrast', '--interior'))], line)
+    else:
+        import subprocess
+
+        def expected(item, *opts):
+            out = os.path.join(tmp, 'exp_%d.bmp' % len(os.listdir(tmp)))
+            subprocess.run([os.path.join(tmp, 'colorize'), item.fname + '.nu', out, *opts], check=True, capture_output=True)
+            return open(out, 'rb').read()
+        base = ['--palette=twilight', '--mapping=histogram']
+        full = base + ['--gamma=1.5', '--brightness=-20', '--contrast=30', '--interior=102030']
+        check('the renderer drew the picture with all four settings', open(g['image_path'](colored), 'rb').read() == expected(colored, *full))
+        plain_image = expected(colored, *base)
+        check('and that is not what the plain settings give', open(g['image_path'](colored), 'rb').read() != plain_image)
+        files_before = sorted(os.listdir(os.path.join(tmp, 'pix')))
+        for label, setter, opts in (
+                ('gamma', lambda: gamma.setValue(0.4), base + ['--gamma=0.4', '--brightness=-20', '--contrast=30', '--interior=102030']),
+                ('brightness', lambda: bright.setValue(55.0), base + ['--gamma=0.4', '--brightness=55', '--contrast=30', '--interior=102030']),
+                ('contrast', lambda: contrast.setValue(-60.0), base + ['--gamma=0.4', '--brightness=55', '--contrast=-60', '--interior=102030']),
+                ('interior', lambda: g['restore_interior_btn'].click(), base + ['--gamma=0.4', '--brightness=55', '--contrast=-60'])):
+            setter()
+            check('changing %s recolors the picture in place' % label, open(g['image_path'](colored), 'rb').read() == expected(colored, *opts) and
+                  g['reg'].source.toImage() == QtGui.QImage(g['image_path'](colored)))
+        check('and leaves no extra files behind', sorted(os.listdir(os.path.join(tmp, 'pix'))) == files_before,
+              set(os.listdir(os.path.join(tmp, 'pix'))) ^ set(files_before))
+        # the inside of the set really is the chosen color, and the palette colors really change with contrast and brightness
+        g['show_interior']('102030')
+        g['on_color_change']()
+        img = QtGui.QImage(g['image_path'](colored))
+        shades = {img.pixel(x, y) & 0xFFFFFF for x in range(0, img.width(), 9) for y in range(0, img.height(), 9)}
+        check('the interior pixels have the chosen color', 0x102030 in shades, len(shades))
+        bright.setValue(-100.0)
+        contrast.setValue(0.0)
+        gamma.setValue(1.0)
+        img = QtGui.QImage(g['image_path'](colored))
+        shades = {img.pixel(x, y) & 0xFFFFFF for x in range(0, img.width(), 9) for y in range(0, img.height(), 9)}
+        check('brightness -100 leaves only the interior color and black', shades <= {0x102030, 0x000000}, len(shades))
+        g['restore_brightness_btn'].click()
+
+    # settings are remembered per view, saved in the PNG, and restored by Open and by selecting the view
+    for box, v in ((gamma, 2.25), (bright, 15.0), (contrast, -35.0)):
+        box.setValue(v)
+    g['show_interior']('a0b1c2')
+    pal.setCurrentText('fire')
+    g['on_run']()                                   # redrawn in place with every setting
+    here = MAP.curr
+    check('the view\'s record has all eight settings', tuple(g['VIEW_COLORS'][here.fname]) == ('fire', 'histogram', 0.0, 0.0, 2.25, 15.0, -35.0, 'a0b1c2') or
+          tuple(g['VIEW_COLORS'][here.fname])[4:] == (2.25, 15.0, -35.0, 'a0b1c2'), g['VIEW_COLORS'][here.fname])
+    g['QFileDialog'] = dialog_returning(os.path.join(saves, 'adjusted.png'))
+    g['on_save']()
+    got = parse_view(read_png_text(os.path.join(saves, 'adjusted.png')))
+    check('the PNG carries gamma, brightness, contrast and the interior color',
+          (got['gamma'], got['brightness'], got['contrast'], got['interior']) == (2.25, 15.0, -35.0, 'a0b1c2'), got)
+    # a different view with different settings
+    g['on_reset']()
+    release(g, 100, 100, 400)
+    for box, v in ((gamma, 0.5), (bright, -60.0), (contrast, 80.0)):
+        box.setValue(v)
+    g['show_interior']('ffffff')
+    g['on_run']()
+    other = MAP.curr
+    check('a second view has its own record', tuple(g['VIEW_COLORS'][other.fname])[4:] == (0.5, -60.0, 80.0, 'ffffff'), g['VIEW_COLORS'][other.fname])
+    # Open the saved one: everything comes back
+    g['QFileDialog'] = dialog_returning(os.path.join(saves, 'adjusted.png'))
+    g['on_open']()
+    now = (gamma.value(), bright.value(), contrast.value(), g['interior_hex']())
+    check('Open restores gamma, brightness, contrast and the interior color', now == (2.25, 15.0, -35.0, 'a0b1c2'), now)
+    reopened = MAP.curr
+    if not REAL:
+        line = [c.split() for c in calls() if c.strip() and c.split()[0] != 'REF_EXISTED'][-1]
+        check('Open renders with them', {'--gamma=2.25', '--brightness=15', '--contrast=-35', '--interior=a0b1c2'} <= set(line), line)
+    check('the reopened view\'s record has them', tuple(g['VIEW_COLORS'][reopened.fname])[4:] == (2.25, 15.0, -35.0, 'a0b1c2'))
+    # selecting the other view, then this one, shows each view's own
+    other.icon.click()
+    now = (gamma.value(), bright.value(), contrast.value(), g['interior_hex'](), interior.text())
+    check('selecting a view shows its gamma, brightness, contrast and interior', now == (0.5, -60.0, 80.0, 'ffffff', '#ffffff'), now)
+    reopened.icon.click()
+    now = (gamma.value(), bright.value(), contrast.value(), g['interior_hex'](), interior.text())
+    check('and selecting the other shows its own', now == (2.25, 15.0, -35.0, 'a0b1c2', '#a0b1c2'), now)
+    # a region boxed from a view starts from that view's settings
+    for box, v in ((gamma, 7.0), (bright, 33.0), (contrast, 11.0)):
+        box.setValue(v)                             # (settings left in the controls from something else)
+    other.icon.click()
+    release(g, 200, 200, 300)
+    g['on_run']()
+    child = MAP.curr
+    check('a region boxed from a view inherits its gamma, brightness, contrast and interior (not what was left in the controls)',
+          tuple(g['VIEW_COLORS'][child.fname])[4:] == (0.5, -60.0, 80.0, 'ffffff'), g['VIEW_COLORS'][child.fname])
+    # a PNG saved before these settings existed opens with the plain ones
+    img = QtGui.QImage(30, 20, QtGui.QImage.Format_RGB32)
+    for k, v in view_text('-1', '0', '2', 1, 'ocean', 'log', 0, 0).items():
+        if k.split('.')[-1] not in ('gamma', 'brightness', 'contrast', 'interior'):
+            img.setText(k, v)
+    old_png = os.path.join(saves, 'old.png')
+    img.save(old_png, 'PNG')
+    g['QFileDialog'] = dialog_returning(old_png)
+    g['on_open']()
+    now = (gamma.value(), bright.value(), contrast.value(), g['interior_hex']())
+    check('an older PNG without them opens with the plain settings', now == (1.0, 0.0, 0.0, '000000') and pal.currentText() == 'ocean', now)
+    for label, change in (('a gamma out of range', {'mandelbrot.gamma': '50'}), ('a brightness out of range', {'mandelbrot.brightness': '500'}),
+                          ('an interior that is not a color', {'mandelbrot.interior': 'purple'})):
+        tampered = QtGui.QImage(30, 20, QtGui.QImage.Format_RGB32)
+        for k, v in dict(view_text('-1', '0', '2', 1, 'fire', 'log', 0, 0), **change).items():
+            tampered.setText(k, v)
+        bad = os.path.join(saves, 'bad2.png')
+        tampered.save(bad, 'PNG')
+        shown_dialogs, n_entries = len(dialogs), len(list(MAP))
+        g['QFileDialog'] = dialog_returning(bad)
+        g['on_open']()
+        check('Open refuses %s' % label, len(dialogs) == shown_dialogs + 1 and len(list(MAP)) == n_entries, dialogs[-1:])
+    g['QFileDialog'] = real_dialog
+    for box in (gamma, bright, contrast):
+        box.blockSignals(True)
+        box.setValue(1.0 if box is gamma else 0.0)
+        box.blockSignals(False)
+    g['show_interior']('000000')
+    g['on_reset']()
+
+    # -- the side column: the controls and the history pictures share its height; show either alone, or drag the bar
+    split, panes = g['split'], g['panes']
+    cb, ib = g['controls_btn'], g['images_btn']
+    QtWidgets.QApplication.processEvents()
+    sizes = split.sizes()
+    check('the controls and the images both show to begin with', cb.isChecked() and ib.isChecked() and min(sizes) > 100, sizes)
+    check('the controls open with a good share of the column and the images with the rest', 250 < sizes[0] < 0.7 * sum(sizes) and sizes[1] > 150, sizes)
+    check('the opening share is what they need, up to 60% of the column',
+          panes.preferred(sum(sizes)) == max(panes.MIN, min(g['controls_panel'].sizeHint().height() + 4, int(sum(sizes) * 0.6))), panes.preferred(sum(sizes)))
+    check('the buttons and the two toggle buttons sit above the splitter',
+          all(pos_row(n).y() < pos_row('split').y() for n in ('run', 'back', 'save', 'reset', 'controls_btn', 'images_btn')),
+          [pos_row(n).y() for n in ('run', 'controls_btn', 'split')])
+    total = sum(sizes)
+    ib.click()
+    QtWidgets.QApplication.processEvents()
+    check('Images off: the controls take the whole column', split.sizes()[1] == 0 and split.sizes()[0] >= total - 2 and not ib.isChecked(), split.sizes())
+    check('the images are hidden from view', not g['scroll'].isVisibleTo(window) or g['scroll'].height() == 0, g['scroll'].height())
+    check('Run, Back, Save and Reset are still there', all(g[n].isVisibleTo(window) and g[n].isEnabled() for n in ('run', 'back', 'save', 'reset')))
+    cb.click()
+    check('the last open part cannot be hidden', cb.isChecked() and split.sizes()[1] == 0 and split.sizes()[0] > 0, (cb.isChecked(), split.sizes()))
+    ib.click()
+    QtWidgets.QApplication.processEvents()
+    check('Images back on: both show again, divided as before', ib.isChecked() and min(split.sizes()) > 100 and abs(split.sizes()[0] - sizes[0]) <= 3,
+          (split.sizes(), sizes))
+    cb.click()
+    QtWidgets.QApplication.processEvents()
+    check('Controls off: the images take the whole column', split.sizes()[0] == 0 and split.sizes()[1] >= total - 2 and not cb.isChecked(), split.sizes())
+    check('the controls are hidden but Run and the toggle buttons are still there', all(g[n].isVisibleTo(window) for n in ('run', 'controls_btn', 'images_btn')))
+    ib.click()
+    check('the images cannot be hidden while the controls are', ib.isChecked() and split.sizes()[1] > 0)
+    cb.click()
+    QtWidgets.QApplication.processEvents()
+    check('Controls back on: both show again', cb.isChecked() and ib.isChecked() and min(split.sizes()) > 100, split.sizes())
+    # dragging the bar (the real splitter call that a drag makes)
+    split.moveSplitter(sizes[0] + 80, 1)
+    QtWidgets.QApplication.processEvents()
+    moved = split.sizes()
+    check('dragging the bar down gives the controls more room and the images less', moved[0] > sizes[0] + 60 and moved[1] < sizes[1] - 60 and cb.isChecked() and ib.isChecked(), (moved, sizes))
+    split.moveSplitter(20, 1)
+    QtWidgets.QApplication.processEvents()
+    check('dragging it to the top closes the controls and unchecks their button', split.sizes()[0] == 0 and not cb.isChecked() and ib.isChecked(), (split.sizes(), cb.isChecked()))
+    cb.click()
+    QtWidgets.QApplication.processEvents()
+    check('reopening them returns to where the bar had been', cb.isChecked() and abs(split.sizes()[0] - moved[0]) <= 3, (split.sizes(), moved))
+    split.moveSplitter(45, 1)                       # (a sliver too small to be of any use closes too)
+    QtWidgets.QApplication.processEvents()
+    check('dragging the bar nearly to the top closes the controls rather than leaving a sliver', split.sizes()[0] == 0 and not cb.isChecked() and ib.isChecked(), (split.sizes(), cb.isChecked()))
+    cb.click()
+    QtWidgets.QApplication.processEvents()
+    split.moveSplitter(sum(split.sizes()) - 10, 1)
+    QtWidgets.QApplication.processEvents()
+    check('dragging it to the bottom closes the images and unchecks their button', split.sizes()[1] == 0 and not ib.isChecked() and cb.isChecked(), (split.sizes(), ib.isChecked()))
+    ib.click()
+    QtWidgets.QApplication.processEvents()
+    check('and they come back too', ib.isChecked() and cb.isChecked() and min(split.sizes()) > 60, split.sizes())
+    check('the picture has not changed size', g['reg'].width() > 600, g['reg'].width())
+    # the controls still work when scrolled, and Enter still runs while the controls are closed
+    cb.click()
+    QtWidgets.QApplication.processEvents()
+    release(g, 300, 500, 600)
+    entries = len(list(MAP))
+    g['run_keys'][0].activated.emit()
+    check('Enter still runs the selection with the controls closed', len(list(MAP)) == entries + 1, (entries, len(list(MAP))))
+    cb.click()
+    QtWidgets.QApplication.processEvents()
+    g['on_reset']()
 
     # -- Reset offers to delete the files of the views it throws away (but keeps the opening view's)
     pix_dir = g['PIX_DIR']

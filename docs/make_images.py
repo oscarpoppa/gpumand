@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Regenerates the pictures used in README.md (docs/images/*.png) by running the real renderer.
 
-    make cpu && python3 docs/make_images.py
+    make cpu && python3 docs/make_images.py [adjustments]
 
-Needs mand-cpu and colorize built, gmpy2 (for deep views) and Pillow. The GUI screenshot is made separately
+Name a picture (zoom-journey, palettes, mappings or adjustments) to redraw just that one. Needs mand-cpu and colorize built, gmpy2 (for deep views) and Pillow. The GUI screenshot is made separately
 (docs/make_screenshot.py). Rendering the deep tiles takes a few seconds each.
 """
 import os
@@ -68,9 +68,26 @@ def sheet(tiles, cols, tile_w, gap=8):
     return img
 
 
+def adjustments(tmp):
+    """4. gamma, brightness, contrast and the interior color, on one view"""
+    x, y = corner(SEAHORSE, Decimal('0.02'))
+    nu = render(tmp, 'adjust', x, y, Decimal('0.02'), 3)
+    settings = [('plain', []), ('gamma 2.5', ['--gamma=2.5']), ('gamma 0.4', ['--gamma=0.4']),
+                ('brightness +35', ['--brightness=35']), ('contrast +70', ['--contrast=70']),
+                ('interior 1a2a6c', ['--interior=1a2a6c'])]
+    tiles = [caption(recolor(nu, os.path.join(tmp, 'a%d.bmp' % i), '--palette=fire', *opts), label, 34)
+             for i, (label, opts) in enumerate(settings)]
+    sheet(tiles, 3, 480).save(os.path.join(OUT, 'adjustments.png'), optimize=True)
+
+
 def main():
     os.makedirs(OUT, exist_ok=True)
+    only = sys.argv[1] if len(sys.argv) > 1 else None
+    if only not in (None, 'adjustments', 'zoom-journey', 'palettes', 'mappings'):
+        sys.exit('unknown picture %r' % only)
     with tempfile.TemporaryDirectory() as tmp:
+        if only == 'adjustments':
+            return adjustments(tmp)
         # 1. a journey from the whole set to far past double precision
         whole = render(tmp, 'whole', -2.75, Decimal('-1.333333'), 4, 1)
         views = [(whole, 'the whole set  (width 4)')]
@@ -96,6 +113,7 @@ def main():
         tiles = [caption(recolor(nu, os.path.join(tmp, 'm%d.bmp' % i), '--palette=ocean', '--mapping=' + m), m, 34)
                  for i, m in enumerate(['histogram', 'linear', 'log'])]
         sheet(tiles, 3, 480).save(os.path.join(OUT, 'mappings.png'), optimize=True)
+        adjustments(tmp)
 
 
 if __name__ == '__main__':

@@ -12,8 +12,9 @@ where ordinary floating point gives up. It runs on a CUDA GPU, or on plain CPU c
 * **Zooms past 1e-1000.** Plain double precision runs out near a view width of 1e-13. Below 1e-9 gpumand switches to *perturbation
   theory*: it works out one exact reference path with arbitrary-precision numbers, and every pixel only tracks its tiny difference from it.
   Coordinates are kept as exact decimals all the way, so repeated zooms never round off.
-* **Smooth, pleasing colors.** Nine palettes, three ways of spreading them over the image, and no color banding. Changing a color setting
-  repaints the picture instantly without drawing it again.
+* **Smooth, pleasing colors.** Nine palettes, three ways of spreading them over the image, and no color banding. Gamma, brightness,
+  contrast and the color of the inside of the set can be adjusted too. Changing a color setting repaints the picture instantly without
+  drawing it again.
 * **Save and reopen.** Saved pictures are PNG files that remember where they came from, so **Open a saved view** brings one back as a
   live view you can recolor and keep zooming into.
 * **Tidy.** It cleans up after itself and asks before throwing anything away.
@@ -64,12 +65,13 @@ Run it:
 |---|---|
 | Drag on the picture | Draws a selection box (always the picture's own shape). Its exact coordinates appear on the right. |
 | **Run** (or **Enter**) | Draws the selection. If you haven't made a new selection, it redraws the current view in place, which is how you apply a new iteration limit. |
-| **Back**, thumbnails | Return to an earlier view. Every control (coordinates, multiplier, palette, mapping, scale, shift) then shows that view's own settings, and a region boxed from it starts from them, not from whatever you used last. The selected thumbnail has a tiny **×** in its corner: it deletes that view and all of its files (after asking), and shows the view before it. Views that were zoomed from the deleted one now hang from its parent, so **Back** always goes to the next real view back. The opening view has no ×. |
+| **Back**, thumbnails | Return to an earlier view. Every control (coordinates, multiplier, and every color setting) then shows that view's own settings, and a region boxed from it starts from them, not from whatever you used last. The selected thumbnail has a tiny **×** in its corner: it deletes that view and all of its files (after asking), and shows the view before it. Views that were zoomed from the deleted one now hang from its parent, so **Back** always goes to the next real view back. The opening view has no ×. |
 | **Save** | Writes the picture on screen as a PNG (see below). |
 | **Open a saved view...** | Draws a view from a PNG this program saved. |
 | **Reset** | Back to the whole set (it may ask about old files first). |
 | Iterations dial / Multiplier | The most iterations a render may use is 2000 times the multiplier, up to 20 million (40 billion iterations). More iterations fill in black areas of deep views but take longer. At the top of the range a view with much of its area inside the set can take hours, because every inside pixel runs to the full limit, and the window stays busy until the render finishes. |
-| Colors | Palette, mapping, Scale and Shift. Each change repaints at once. The **Restore** buttons put Scale and Shift back to their starting values. |
+| Colors | Palette, mapping, Scale, Shift, Gamma, Brightness, Contrast and Interior. Each change repaints at once. Each setting except the palette and mapping has a **Restore** button that puts it back to its starting value. |
+| **Controls** and **Images** buttons | The side column has two parts that share its height: the controls, and the pictures of the views you have made. Each button shows or hides its part, so one part can have the whole column. Drag the bar between the parts to give either more room (drag it to the end to close a part). One part always stays open, and Run, Back, Save and Reset stay in view either way. |
 
 The coordinate boxes show long numbers in short form, such as `-0.743643887...6114774` and `1.23456789...8901234e-45`:
 the first digits, the last digits and the power of ten. Hover over a box to see every digit.
@@ -98,16 +100,34 @@ and three **mappings** that decide how counts become colors:
 
 The box shows `default` until you type a number, and `default` uses the built-in starting value for the mapping you have chosen (the table
 above), so it changes when you change the mapping. The **Restore** button beside the box puts Scale back to `default`.
+The arrow buttons change Scale in fine steps that suit the mapping (0.05 for `histogram`, 0.5 for `linear`, 0.01 for `log`), the first click
+from `default` moves one step away from the mapping's starting value, Page Up and Page Down move ten steps, and you can type up to three decimals.
 
 **Shift** adds an offset to the position of every color along the palette. Every color moves along it by the same amount, so the colors change
 but the pattern does not. It is measured in palette lengths: for example 0.25 moves each color a quarter of the way along the palette, and 0.5
 moves it halfway. The **Restore** button beside the box puts Shift back to its starting value.
 
+**Gamma**, **Brightness**, **Contrast** and **Interior** change how the colors look without moving them around the picture:
+
+![The same view plain, then with gamma 2.5, gamma 0.4, brightness +35, contrast +70 and a blue interior](docs/images/adjustments.png)
+
+* **Gamma** (0.1 to 10; 1 changes nothing) bends the colors within each repeat of the palette. Above 1, more of the picture gets the
+  colors from the first part of each repeat, and below 1 more gets the colors from the last part. What that looks like depends on the
+  palette, so try it: it often brings out detail that the plain settings flatten.
+* **Brightness** (-100 to 100) makes every palette color lighter or darker. At 100 every color is white, and at -100 every color is black.
+* **Contrast** (-100 to 100) pushes the palette's colors away from mid-gray, or toward it. At -100 every color is the same gray. Strong
+  brightness and contrast settings clip the lightest and darkest colors to pure white and black, which loses some of the smooth blending.
+* **Interior** is the color of the pixels inside the set, which are black by default. Click the button to choose another color: click the
+  color area (or a basic color) and press OK. To get a dark color, drag the brightness slider at the dialog's right edge down. Only the
+  inside of the set changes color, so the effect is biggest on the whole set and on views with a lot of black, and small on deep views where
+  most of the picture is outside the set. Brightness and contrast leave the interior color alone.
+
 ### Saving, reopening and cleaning up
 
 **Save** writes a PNG that remembers its view: the exact coordinates (every digit), the iteration multiplier, and the color settings, stored
 as ordinary PNG text fields that any PNG tool can read (for example `exiftool`). **Open a saved view...** reads them back, checks every field,
-and draws the view again as a new entry in the history. It only opens `.png` files that really are PNGs and that this program saved. Redrawing
+and draws the view again as a new entry in the history. It only opens `.png` files that really are PNGs and that this program saved
+(pictures saved before gamma, brightness, contrast and interior existed open with those at their starting values). Redrawing
 takes as long as the original render did.
 
 Every render leaves files in `pix/`: the picture, plus a `.nu` file of the raw counts that makes recoloring instant. Changing colors replaces a

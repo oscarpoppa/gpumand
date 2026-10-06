@@ -258,8 +258,22 @@ def read_bmp_pixels(path):
     return w, h, list(px)
 
 
-def expected_colors(nu, table, mapping, scale, shift, interior=0):
+def adjusted(table, brightness, contrast):
+    """The palette after brightness and contrast, from the formula documented in colorize.c."""
+    k, add = 1.0 + contrast / 100.0, brightness * 2.55
+    out = []
+    for color in table:
+        c = 0
+        for shift in (0, 8, 16):
+            v = math.floor(((color >> shift & 0xFF) - 127.5) * k + 127.5 + add + 0.5)
+            c |= max(0, min(255, v)) << shift
+        out.append(c)
+    return out
+
+
+def expected_colors(nu, table, mapping, scale, shift, interior=0, gamma=1.0, brightness=0.0, contrast=0.0):
     """Independent implementation of the documented mapping rules (see colorize.h)."""
+    table = adjusted(table, brightness, contrast)
     escaped = sorted(v for v in nu if v >= 0)
     out = []
     for v in nu:
@@ -272,7 +286,8 @@ def expected_colors(nu, table, mapping, scale, shift, interior=0):
             pos = v / scale + shift
         else:
             pos = math.log2(v + 1.0) * scale + shift
-        out.append(table[min(int((pos - math.floor(pos)) * PALETTE_SIZE), PALETTE_SIZE - 1)])
+        frac = (pos - math.floor(pos)) ** gamma
+        out.append(table[min(int(frac * PALETTE_SIZE), PALETTE_SIZE - 1)])
     return out
 
 
@@ -345,6 +360,62 @@ class Coloring(unittest.TestCase):
             else:
                 self.assertEqual(b, c)
 
+    def check_adjusted(self, options, **settings):
+        rows = self.values()
+        _, _, got = self.color(rows, '--mapping=linear', '--scale=40', *options)
+        want = expected_colors(self.flat(rows), dump_palette('twilight'), 'linear', 40.0, 0.0, **settings)
+        self.assertEqual(got, want)
+        return got
+
+    def test_gamma_bends_the_position_inside_each_cycle(self):
+        plain = self.check_adjusted([])
+        for g in (0.2, 0.5, 2.0, 7.5):
+            self.assertNotEqual(self.check_adjusted(['--gamma=%g' % g], gamma=g), plain, g)
+        self.assertEqual(self.check_adjusted(['--gamma=1'], gamma=1.0), plain)         # 1 changes nothing
+        # the middle of a cycle (0.5) moves to the start of the palette with gamma > 1, to the end with gamma < 1
+        table = dump_palette('twilight')
+        pick = lambda opts: self.color([[200.0]], '--mapping=linear', '--scale=400', *opts)[2][0]
+        self.assertEqual(pick([]), table[2048])
+        self.assertEqual(pick(['--gamma=3']), table[int(0.125 * PALETTE_SIZE)])
+        self.assertEqual(pick(['--gamma=0.5']), table[int(0.5 ** 0.5 * PALETTE_SIZE)])
+        # both ends of the cycle stay where they are, so the loop of colors still closes up without a seam
+        self.assertEqual(self.color([[0.0]], '--mapping=linear', '--scale=400', '--gamma=3')[2][0], table[0])
+
+    def test_brightness_and_contrast_change_the_palette_colors(self):
+        plain = self.check_adjusted([])
+        for b, c in ((40, 0), (-40, 0), (100, 0), (-100, 0), (0, 50), (0, -50), (0, 100), (0, -100), (30, 60), (-25, -70)):
+            got = self.check_adjusted(['--brightness=%g' % b, '--contrast=%g' % c], brightness=b, contrast=c)
+            self.assertNotEqual(got, plain, (b, c))
+
+    def test_brightness_and_contrast_move_the_light_and_dark_ends_apart_or_together(self):
+        rows = self.values()
+        flat = self.flat(rows)
+
+        def luma(opts):
+            px = self.color(rows, '--scale=1', *opts)[2]
+            lights = [sum((c >> s & 0xFF) for s in (0, 8, 16)) / 3.0 for v, c in zip(flat, px) if v >= 0]
+            return min(lights), max(lights), sum(lights) / len(lights)
+        base, bright, dark = luma([]), luma(['--brightness=50']), luma(['--brightness=-50'])
+        self.assertGreater(bright[2], base[2] + 20)
+        self.assertLess(dark[2], base[2] - 20)
+        more, less = luma(['--contrast=60']), luma(['--contrast=-60'])
+        self.assertGreater(more[1] - more[0], base[1] - base[0])
+        self.assertLess(less[1] - less[0], base[1] - base[0])
+        flat_gray = luma(['--contrast=-100'])
+        self.assertLess(flat_gray[1] - flat_gray[0], 1.5)                   # no contrast at all: every color mid-gray
+
+    def test_extremes_are_limited_to_valid_colors_and_leave_the_interior_alone(self):
+        rows = self.values()
+        flat = self.flat(rows)
+        for opts in (['--brightness=100', '--contrast=100'], ['--brightness=-100', '--contrast=100'], ['--contrast=-100']):
+            _, _, px = self.color(rows, '--interior=123456', *opts)
+            self.assertTrue(all(0 <= c <= 0xFFFFFF for c in px))
+            self.assertTrue(all(c == 0x123456 for v, c in zip(flat, px) if v < 0), opts)
+        _, _, white = self.color(rows, '--brightness=100')
+        self.assertTrue(all(c == 0xFFFFFF for v, c in zip(flat, white) if v >= 0))
+        _, _, black = self.color(rows, '--brightness=-100')
+        self.assertTrue(all(c == 0 for v, c in zip(flat, black) if v >= 0))
+
     def test_shift_rotates_the_palette(self):
         rows = [[100.0 + i for i in range(40)]]
         table = dump_palette('twilight')
@@ -399,6 +470,9 @@ class Coloring(unittest.TestCase):
         rows = self.values()
         for bad, text in ((['--palette=nope'], 'unknown palette'), (['--mapping=x'], 'unknown mapping'),
                           (['--scale=-1'], '--scale'), (['--shift=zz'], '--shift'), (['--interior=abc'], '--interior'),
+                          (['--gamma=0'], '--gamma'), (['--gamma=11'], '--gamma'), (['--gamma=x'], '--gamma'),
+                          (['--brightness=101'], '--brightness'), (['--brightness=nan'], '--brightness'),
+                          (['--contrast=-101'], '--contrast'), (['--contrast='], '--contrast'),
                           (['--what=1'], 'unexpected')):
             res = self.color(rows, *bad, check=False)
             self.assertNotEqual(res.returncode, 0, bad)

@@ -133,7 +133,8 @@ class CpuRenderer(unittest.TestCase):
 
     def test_image_matches_the_colorize_tool(self):
         # recoloring a saved nu file must give exactly the image the renderer wrote
-        opts = ['--palette=fire', '--mapping=linear', '--scale=30', '--shift=0.1', '--interior=102030']
+        opts = ['--palette=fire', '--mapping=linear', '--scale=30', '--shift=0.1', '--gamma=1.7', '--brightness=-15',
+                '--contrast=40', '--interior=102030']
         out, _ = self.render(MAND, -0.7436, 0.1318, 1e-3, 1, options=opts)
         nuf = out[:-4] + '.nu'
         again = os.path.join(self.tmp, 'again.bmp')
@@ -252,6 +253,9 @@ class CpuRenderer(unittest.TestCase):
         self.fails(*base, '--scale=-3', text='--scale')
         self.fails(*base, '--scale=abc', text='--scale')
         self.fails(*base, '--shift=x', text='--shift')
+        self.fails(*base, '--gamma=0', text='--gamma')
+        self.fails(*base, '--brightness=200', text='--brightness')
+        self.fails(*base, '--contrast=x', text='--contrast')
         self.fails(*base, '--interior=12345', text='--interior')
         self.fails(*base, '--interior=gggggg', text='--interior')
         self.fails(*base, '--bogus=1', text='unknown option')

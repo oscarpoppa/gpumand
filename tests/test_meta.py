@@ -28,7 +28,7 @@ def text(key, value):
     return chunk(b'tEXt', key.encode('latin-1') + b'\0' + value.encode('latin-1'))
 
 
-GOOD = meta.view_text('-0.75', '0.1', '1E-30', 100, 'fire', 'log', 30, 0.25)
+GOOD = meta.view_text('-0.75', '0.1', '1E-30', 100, 'fire', 'log', 30, 0.25, 2.5, -20, 35, '1A2b3C')
 
 
 class Meta(unittest.TestCase):
@@ -107,6 +107,18 @@ class Meta(unittest.TestCase):
         got = meta.parse_view(GOOD)
         self.assertEqual((got['x'], got['y'], got['w'], got['multiplier']), (Decimal('-0.75'), Decimal('0.1'), Decimal('1E-30'), 100))
         self.assertEqual((got['palette'], got['mapping'], got['scale'], got['shift']), ('fire', 'log', 30.0, 0.25))
+        self.assertEqual((got['gamma'], got['brightness'], got['contrast'], got['interior']), (2.5, -20.0, 35.0, '1a2b3c'))
+
+    def test_gamma_brightness_contrast_and_interior_survive_a_png(self):
+        fields = meta.view_text('0', '0', '2', 1, 'ocean', 'linear', 0, 0, 0.35, 100, -100, 'ff00aa')
+        got = meta.parse_view(meta.read_png_text(self.fields_png(fields)))
+        self.assertEqual((got['gamma'], got['brightness'], got['contrast'], got['interior']), (0.35, 100.0, -100.0, 'ff00aa'))
+
+    def test_older_pictures_without_the_newer_fields_get_the_plain_settings(self):
+        newer = ('gamma', 'brightness', 'contrast', 'interior')
+        old = {k: v for k, v in GOOD.items() if k[len('mandelbrot.'):] not in newer}
+        got = meta.parse_view(old)
+        self.assertEqual((got['gamma'], got['brightness'], got['contrast'], got['interior']), (1.0, 0.0, 0.0, '000000'))
 
     def test_bad_fields_are_refused_with_a_reason(self):
         bad = {'no version at all': None, 'x is not a number': {'mandelbrot.x': 'abc'}, 'x is NaN': {'mandelbrot.x': 'NaN'},
@@ -117,14 +129,20 @@ class Meta(unittest.TestCase):
                'palette is empty': {'mandelbrot.palette': ''}, 'palette has a path in it': {'mandelbrot.palette': '../x'},
                'palette is too long': {'mandelbrot.palette': 'p' * 40}, 'mapping is unknown': {'mandelbrot.mapping': 'sparkle'},
                'scale is negative': {'mandelbrot.scale': '-1'}, 'scale is NaN': {'mandelbrot.scale': 'nan'},
-               'shift is text': {'mandelbrot.shift': 'x'}, 'format is newer': {'mandelbrot.version': '2'}}
+               'shift is text': {'mandelbrot.shift': 'x'}, 'format is newer': {'mandelbrot.version': '2'},
+               'gamma is zero': {'mandelbrot.gamma': '0'}, 'gamma is huge': {'mandelbrot.gamma': '11'},
+               'gamma is text': {'mandelbrot.gamma': 'x'}, 'brightness is too high': {'mandelbrot.brightness': '101'},
+               'brightness is NaN': {'mandelbrot.brightness': 'nan'}, 'contrast is too low': {'mandelbrot.contrast': '-101'},
+               'contrast is text': {'mandelbrot.contrast': 'x'}, 'interior is short': {'mandelbrot.interior': 'fff'},
+               'interior is not hex': {'mandelbrot.interior': 'gggggg'}, 'interior has a #': {'mandelbrot.interior': '#00ff00'}}
         for label, change in bad.items():
             fields = {k: v for k, v in GOOD.items() if k != 'mandelbrot.version'} if change is None else dict(GOOD, **change)
             with self.assertRaises(ValueError, msg=label):
                 meta.parse_view(fields)
 
     def test_missing_fields_are_refused(self):
-        for key in [k for k in GOOD if k.startswith('mandelbrot.') and k != 'mandelbrot.version']:
+        optional = ('gamma', 'brightness', 'contrast', 'interior')       # (older pictures lack these; they are tested above)
+        for key in [k for k in GOOD if k.startswith('mandelbrot.') and k != 'mandelbrot.version' and k[11:] not in optional]:
             fields = {k: v for k, v in GOOD.items() if k != key}
             with self.assertRaises(ValueError, msg=key):
                 meta.parse_view(fields)
