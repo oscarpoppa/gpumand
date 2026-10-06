@@ -125,6 +125,7 @@ VIEW_COLORS = {}
 
 Colors = namedtuple('Colors', ('palette', 'mapping', 'scale', 'shift', 'gamma', 'brightness', 'contrast', 'interior'))
 INTERIOR_DEFAULT = '000000'
+DEFAULT_COLORS = Colors('twilight', 'histogram', 0.0, 0.0, 1.0, 0.0, 0.0, INTERIOR_DEFAULT)     # how every color control starts
 
 
 def current_colors():
@@ -743,6 +744,7 @@ def on_delete_view(fname):
 
 @pyqtSlot()
 def on_reset():
+    global INITPG
     remove_stale_references(PIX_DIR)
     if not offer_cleanup(generated_files(PIX_DIR, opening=False), reset=True):
         return          # the user canceled the reset
@@ -753,7 +755,17 @@ def on_reset():
             del SHOWN[key]       # those file names will be rendered afresh
         for key in [k for k in VIEW_COLORS if k != STARTFILE]:
             del VIEW_COLORS[key]
-        fset(MAP.reset())
+        # every control goes back to its starting position, and the opening view is drawn to match
+        set_color_controls(*DEFAULT_COLORS)
+        VIEW_COLORS[STARTFILE] = current_colors()
+        if INITPG.xywd.d != 0:          # the opening view was redrawn with more iterations: draw it afresh with the starting ones
+            INITPG = INITPG._replace(xywd=INITPG.xywd._replace(d=0))
+            SHOWN.pop(STARTFILE, None)
+            for path in (START_COPY, nu_name(STARTFILE)):
+                if os.path.exists(path):
+                    os.remove(path)
+        ensure_start_image()            # recolors the opening view, or draws it if its counts are gone
+        fset(MAP.reset())               # (this also puts the coordinates, the multiplier and the dial back)
 
 
 def render_view(out, nu, xval, yval, wval, ival):
@@ -908,6 +920,7 @@ if __name__ == '__main__':
         run_keys.append(shortcut)
     reset = QPushButton('Reset') 
     reset.clicked.connect(on_reset)
+    reset.setToolTip('Back to the whole set, with every control at its starting setting')
     back = QPushButton('Back') 
     back.clicked.connect(on_back) 
     save = QPushButton('Save')
