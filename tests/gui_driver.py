@@ -1276,6 +1276,75 @@ def drive():
     QtWidgets.QApplication.processEvents()
     g['on_reset']()
 
+    # -- Reset puts every control back to its starting position, even on the whole set (the opening view)
+    pal, mapping, scale, shift = g['pal_box'], g['map_box'], g['scale_box'], g['shift_box']
+    gamma, bright, contrast = g['gamma_box'], g['brightness_box'], g['contrast_box']
+
+    def everything():
+        return (pal.currentText(), mapping.currentText(), scale.value(), shift.value(), gamma.value(), bright.value(),
+                contrast.value(), g['interior_hex'](), g['inter'].currentIndex(), g['iter_dial'].value(),
+                exact(g, 'xbox'), exact(g, 'ybox'), exact(g, 'wbox'))
+    g['on_reset']()
+    starting = everything()
+    check('the starting position is the documented one', starting[:10] == ('twilight', 'histogram', 0.0, 0.0, 1.0, 0.0, 0.0, '000000', 0, 0), starting)
+
+    def disturb():
+        pal.setCurrentText('fire')
+        mapping.setCurrentText('log')
+        scale.setValue(1.7)
+        shift.setValue(0.35)
+        gamma.setValue(2.2)
+        bright.setValue(25.0)
+        contrast.setValue(-30.0)
+        g['show_interior']('336699')
+        g['on_color_change']()
+        g['inter'].setCurrentIndex(3)
+    disturb()                                                   # on the whole set itself
+    check('the controls really were changed', everything() != starting, everything())
+    g['on_reset']()
+    check('Reset on the whole set puts every control back, including the multiplier and dial', everything() == starting, everything())
+    check('and the opening view\'s record is the starting settings', tuple(g['VIEW_COLORS'][g['STARTFILE']]) == tuple(g['DEFAULT_COLORS']),
+          g['VIEW_COLORS'][g['STARTFILE']])
+    if REAL:
+        import subprocess
+        shipped = open(os.path.join(tmp, 'pix', 'whole.bmp'), 'rb').read()
+        out = os.path.join(tmp, 'plain_whole.bmp')
+        subprocess.run([os.path.join(tmp, 'colorize'), os.path.join(tmp, 'pix', 'whole.bmp.nu'), out], check=True, capture_output=True)
+        check('the opening picture is drawn with the starting colors again', open(g['image_path'](g['INITPG']), 'rb').read() == open(out, 'rb').read())
+        check('and the shipped whole.bmp is untouched', open(os.path.join(tmp, 'pix', 'whole.bmp'), 'rb').read() == shipped)
+        check('and the screen shows it', g['reg'].source.toImage() == QtGui.QImage(g['image_path'](g['INITPG'])))
+    # the opening view redrawn with more iterations goes back to the starting ones
+    g['inter'].setCurrentIndex(4)
+    g['on_run']()
+    check('the opening view was redrawn with a different multiplier', MAP.curr.fname == g['STARTFILE'] and g['INITPG'].xywd.d == 4,
+          (MAP.curr.fname, g['INITPG'].xywd))
+    ncalls = len([c for c in calls() if c.strip()])
+    g['on_reset']()
+    check('Reset puts the opening view\'s multiplier back too', g['INITPG'].xywd.d == 0 and g['inter'].currentIndex() == 0 and
+          g['iter_dial'].value() == 0, (g['INITPG'].xywd, g['inter'].currentIndex()))
+    if not REAL:
+        line = [c.split() for c in [c for c in calls() if c.strip()][ncalls:] if c.split()[0] != 'REF_EXISTED']
+        check('and it is drawn again with the starting iterations', line and line[-1][4] == '1' and line[-1][:3] == ['-2.75', '-1.333333', '4.0'], line)
+    else:
+        check('and it is drawn again with the starting iterations', os.path.exists(os.path.join(tmp, 'pix', 'whole.bmp.nu')))
+    # from a deeper view with everything changed
+    release(g, 300, 500, 600)
+    disturb()
+    g['on_run']()
+    g['on_reset']()
+    check('Reset from a zoomed view with everything changed does the same', everything() == starting and len(list(MAP)) == 1, everything())
+    # a canceled Reset changes nothing
+    release(g, 300, 500, 600)
+    g['on_run']()
+    disturb()
+    mid = everything()
+    keep_ask = g['ask_cleanup']
+    g['ask_cleanup'] = lambda parent, count, size, reset=False: 'cancel'
+    g['on_reset']()
+    check('a canceled Reset leaves every control as it was', everything() == mid and len(list(MAP)) == 2, everything())
+    g['ask_cleanup'] = keep_ask
+    g['on_reset']()
+
     # -- Reset offers to delete the files of the views it throws away (but keeps the opening view's)
     pix_dir = g['PIX_DIR']
     g['on_reset']()
