@@ -73,6 +73,8 @@ Run it:
 | Colors | Palette, mapping, Scale, Shift, Gamma, Brightness, Contrast and Interior. Each change repaints at once. Each setting except the palette and mapping has a **Restore** button that puts it back to its starting value. |
 | **Controls** and **Images** buttons | The side column has two parts that share its height: the controls, and the pictures of the views you have made. Each button shows or hides its part, so one part can have the whole column. Drag the bar between the parts to give either more room (drag it to the end to close a part). One part always stays open, and Run, Back, Save and Reset stay in view either way. |
 
+![The side column with both parts showing, with just the controls, and with just the images](docs/images/side-column.png)
+
 The coordinate boxes show long numbers in short form, such as `-0.743643887...6114774` and `1.23456789...8901234e-45`:
 the first digits, the last digits and the power of ten. Hover over a box to see every digit.
 

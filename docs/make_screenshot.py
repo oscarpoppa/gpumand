@@ -33,13 +33,35 @@ with open(ini, 'w') as fp:
     fp.write('[paths]\nsave_dir=%s\nbin_dir=%s\nrenderer=mand-cpu\n' % (tmp, tmp))
 
 
+def save_side_states(shots):
+    """docs/images/side-column.png: the three states of the side column next to each other, each with a caption."""
+    from PIL import Image, ImageDraw, ImageFont
+    gap, head = 16, 46
+    tiles = []
+    for label, pix in shots:
+        path = os.path.join(tmp, 'side.png')
+        pix.save(path, 'PNG')
+        tiles.append((label, Image.open(path).convert('RGB')))
+    height = max(t.height for _, t in tiles)
+    sheet = Image.new('RGB', (sum(t.width for _, t in tiles) + gap * (len(tiles) + 1), height + head + gap), (45, 45, 45))
+    font = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf', 24)
+    d = ImageDraw.Draw(sheet)
+    x = gap
+    for label, t in tiles:
+        box = d.textbbox((0, 0), label, font=font)
+        d.text((x + (t.width - (box[2] - box[0])) // 2, 8), label, font=font, fill=(235, 235, 235))
+        sheet.paste(t, (x, head))
+        x += t.width + gap
+    sheet.save(os.path.join(HERE, 'images', 'side-column.png'), optimize=True)
+
+
 def take(self):
     g = sys._getframe(1)
     while 'MAP' not in g.f_globals:
         g = g.f_back
     G = g.f_globals
     window, reg = G['window'], G['reg']
-    window.resize(1700, 1000)
+    window.resize(1900, 1150)
     QtWidgets.QApplication.processEvents()
     G['pal_box'].setCurrentText('twilight')
     for w in STEPS:
@@ -51,11 +73,25 @@ def take(self):
         G['inter'].setCurrentIndex(2)
         G['on_run']()
         QtWidgets.QApplication.processEvents()
-    G['split'].setSizes([700, 250])         # give the controls most of the column so the whole Colors box shows
-    QtWidgets.QApplication.processEvents()
-    G['controls_scroll'].verticalScrollBar().setValue(G['controls_scroll'].verticalScrollBar().maximum())
+    split, cb, ib = G['split'], G['controls_btn'], G['images_btn']
+    total = sum(split.sizes())
+    need = G['controls_panel'].sizeHint().height() + 4
+    split.setSizes([need, total - need])    # the controls get all the height they need, so every control shows
     QtWidgets.QApplication.processEvents()
     window.grab().save(OUT, 'PNG')
+    # the side column in its three states: both parts, the controls alone, the images alone
+    shots = []
+    for label, controls, images in (('both parts', True, True), ('Controls only', True, False), ('Images only', False, True)):
+        for turning_on in (True, False):                  # open what is wanted first: the last open part cannot be hidden
+            for button, on in ((cb, controls), (ib, images)):
+                if on == turning_on and button.isChecked() != on:
+                    button.click()
+        QtWidgets.QApplication.processEvents()
+        shots.append((label, G['side'].grab()))
+    for button in (cb, ib):
+        if not button.isChecked():
+            button.click()
+    save_side_states(shots)
     shutil.rmtree(tmp, ignore_errors=True)
     return 0
 
