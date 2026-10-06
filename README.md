@@ -68,7 +68,7 @@ Run it:
 | **Save** | Writes the picture on screen as a PNG (see below). |
 | **Open a saved view...** | Draws a view from a PNG this program saved. |
 | **Reset** | Back to the whole set (it may ask about old files first). |
-| Iterations dial / Multiplier | The most iterations a render may use is 2000 times the multiplier, up to 20 million (40 billion iterations). More iterations fill in black areas of deep views but take longer. |
+| Iterations dial / Multiplier | The most iterations a render may use is 2000 times the multiplier, up to 20 million (40 billion iterations). More iterations fill in black areas of deep views but take longer. At the top of the range a view with much of its area inside the set can take hours, because every inside pixel runs to the full limit, and the window stays busy until the render finishes. |
 | Colors | Palette, mapping, Scale and Shift. Each change repaints at once. The **Restore** buttons put Scale and Shift back to their starting values. |
 
 The picture grows with the window. If the window's shape doesn't match, up to 15% of the picture is trimmed from the edges rather than
@@ -123,19 +123,6 @@ with generated files around, it asks what to do:
 The × on a thumbnail deletes just that view's files (its picture, counts and any leftovers, matched by exact name). Only files the program made, by exact name in `pix/`, are ever deleted. Pictures you saved, kept pictures and the shipped `pix/whole.bmp` are
 never touched. On Reset the opening view's own files are spared (it needs them), and if only those are left when you quit they are removed without
 asking: they are redrawn at the next start.
-
-## Deep zoom, in a little more detail
-
-| Technique | What it does |
-|---|---|
-| **Perturbation** (`deepzoom.py`, `pert.h`) | One arbitrary-precision reference orbit at the view's center (needs `gmpy2`); each pixel iterates only its small offset from it, in ordinary doubles. |
-| **BLA skipping** (`bla.c`, `pert.h`) | Bilinear-approximation tables let a pixel skip runs of up to thousands of iterations at once while its offset is tiny: about 15 times fewer loop steps at width 1e-200. Orbits over about 4 million points get no table (memory). |
-| **Floatexp** (`pert.h`) | Below a pixel step of about 1e-271 the offsets carry their own exponent, so views past double's 1e-308 limit work (tested to 1e-1000). It costs about the same per iteration as the double path: a 1e-400 view takes about 2.5 seconds on 8 CPU cores. |
-| **Rebasing** | When a pixel's path outruns the reference, or its full value becomes smaller than its offset, it restarts relative to the start of the reference. That avoids the usual "glitch" blobs without extra reference orbits. |
-
-Reference orbits are capped at 16.7 million points. A pixel that outlasts the reference starts over from it, so the cap affects only pixels
-that take longer than that to escape. A view with much of its area inside the set is slow at the top of the iteration range, since every
-inside pixel runs to the full limit. It can take hours, and the window stays busy until the render finishes.
 
 ## The CPU renderer
 
