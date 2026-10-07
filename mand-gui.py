@@ -2,7 +2,7 @@
 import os
 from PyQt5.QtCore import QPoint, QRect, QSize, Qt, pyqtSlot
 from PyQt5.QtGui import QColor, QIcon, QImage, QKeySequence, QPixmap
-from PyQt5.QtWidgets import (QApplication, QColorDialog, QComboBox, QDial, QDoubleSpinBox, QFileDialog, QFormLayout, QGroupBox, QHBoxLayout,
+from PyQt5.QtWidgets import (QApplication, QColorDialog, QComboBox, QDial, QDoubleSpinBox, QSpinBox, QFileDialog, QFormLayout, QGroupBox, QHBoxLayout,
                              QLabel, QLineEdit, QMessageBox, QPushButton, QRubberBand, QScrollArea, QShortcut, QSizePolicy, QSplitter,
                              QVBoxLayout, QWidget)
 from sys import argv, exit, stderr
@@ -15,7 +15,8 @@ from optparse import OptionParser
 from decimal import Decimal
 from cleanup import delete_files, generated_files, move_files, new_folder, split_images, view_files, remove_stale_references, size_text, total_size
 from meta import parse_view, read_png_text, view_text
-from deepzoom import abbreviate, ITERATIONS, WIDTH, HEIGHT, PERTURB_BELOW, selection_to_region, write_reference
+from deepzoom import abbreviate, ITERATIONS, WIDTH, HEIGHT, PERTURB_BELOW, POWER_MIN_DEGREE, POWER_MAX_DEGREE, selection_to_region, write_reference
+from funcspec import write_power_spec
 
 
 parser = OptionParser()
@@ -145,11 +146,48 @@ def recorded(fname):
 
 def forget(fname):
     VIEW_COLORS.pop(fname, None)
+    VIEW_FUNC.pop(fname, None)
 
 
 def forget_all_but(keep):
     for key in [k for k in VIEW_COLORS if k != keep]:
         del VIEW_COLORS[key]
+    for key in [k for k in VIEW_FUNC if k != keep]:
+        del VIEW_FUNC[key]
+
+
+# The function each view was drawn with, as the exponent d of z^d + c (2 is the ordinary Mandelbrot set). A view
+# with no entry was drawn with 2.
+VIEW_FUNC = {}
+FUNC_DEFAULT = 2
+
+
+def current_degree():
+    return FUNC_DEFAULT if func_box.currentIndex() == 0 else power_box.value()
+
+
+def remember_func(fname):
+    VIEW_FUNC[fname] = current_degree()
+
+
+def recorded_func(fname):
+    return VIEW_FUNC.get(fname, FUNC_DEFAULT)
+
+
+def set_function_controls(degree):
+    """Show this function in the Function box without drawing anything."""
+    for box in (func_box, power_box):
+        box.blockSignals(True)
+    func_box.setCurrentIndex(0 if degree == FUNC_DEFAULT else 1)
+    power_box.setValue(max(degree, POWER_MIN_DEGREE))
+    power_box.setEnabled(degree != FUNC_DEFAULT)
+    for box in (func_box, power_box):
+        box.blockSignals(False)
+
+
+def on_func_changed(*_):
+    """A new function is chosen: it applies to the next Run (which draws a new view), not to the picture on screen."""
+    power_box.setEnabled(func_box.currentIndex() == 1)
 
 
 def interior_hex():
@@ -201,7 +239,7 @@ def view_meta(item):
     """The text fields describing a view, for its PNG."""
     colors = recorded(item.fname) or current_colors()
     x, y, w, d = item.xywd
-    return view_text(x, y, w, MULTIPLIERS[int(d)], *colors)
+    return view_text(x, y, w, MULTIPLIERS[int(d)], *colors, degree=recorded_func(item.fname))
 
 
 def write_png(item, source, target):
@@ -716,6 +754,7 @@ def fset(item):
     reg.cand_xyw.w = item.xywd.w
     reg.cand_xyw.d = int(item.xywd.d)
     inter.setCurrentIndex(int(item.xywd.d))
+    set_function_controls(recorded_func(item.fname))
     if recorded(item.fname):                    # every control describes this view, not whatever was used before
         set_color_controls(*recorded(item.fname))
     reg.setPixmap(load_pixmap(image_path(item)))
@@ -775,7 +814,9 @@ def on_reset():
         forget_all_but(STARTFILE)
         # every control goes back to its starting position, and the opening view is drawn to match
         set_color_controls(*DEFAULT_COLORS)
+        set_function_controls(FUNC_DEFAULT)
         remember(STARTFILE)
+        remember_func(STARTFILE)
         if INITPG.xywd.d != 0:          # the opening view was redrawn with more iterations: draw it afresh with the starting ones
             INITPG = INITPG._replace(xywd=INITPG.xywd._replace(d=0))
             SHOWN.pop(STARTFILE, None)
@@ -786,17 +827,22 @@ def on_reset():
         fset(MAP.reset())               # (this also puts the coordinates, the multiplier and the dial back)
 
 
-def render_view(out, nu, xval, yval, wval, ival):
+def render_view(out, nu, xval, yval, wval, ival, degree=FUNC_DEFAULT):
     """Run the renderer for a view, writing the image to `out` and its counts to `nu`. Returns a problem
     description, or None on success."""
     cmd = [os.path.join(BIN_DIR, RENDERER), xval, yval, wval, out, ival]
-    refname = None
+    refname = specname = None
+    if degree != FUNC_DEFAULT:
+        specname = out + '.func'
+        write_power_spec(specname, degree)
     if Decimal(wval) < PERTURB_BELOW:
         # Too deep for plain double: render by perturbation off an arbitrary-precision reference orbit.
         refname = out + '.ref'
-        write_reference(refname, xval, yval, wval, ITERATIONS * int(ival))
+        write_reference(refname, xval, yval, wval, ITERATIONS * int(ival), degree)
         cmd.append(refname)
-    cmd += color_options() + ['--nu-out=' + nu]     # options may follow the positional arguments
+    cmd += color_options() + ['--nu-out=' + nu]
+    if specname:
+        cmd.append('--func=' + specname)     # options may follow the positional arguments
     problem = None
     try:
         status = call(cmd)
@@ -805,8 +851,9 @@ def render_view(out, nu, xval, yval, wval, ival):
     except OSError as e:     # e.g. the renderer is not built or not executable
         problem = 'cannot run {}: {}'.format(cmd[0], e)
     finally:
-        if refname and os.path.exists(refname):
-            os.remove(refname)
+        for temporary in (refname, specname):
+            if temporary and os.path.exists(temporary):
+                os.remove(temporary)
     return problem
 
 
@@ -814,12 +861,12 @@ def same_region(a, b):
     return Decimal(a.x) == Decimal(b.x) and Decimal(a.y) == Decimal(b.y) and Decimal(a.w) == Decimal(b.w)
 
 
-def rerender_in_place(item, xval, yval, wval, ival):
+def rerender_in_place(item, xval, yval, wval, ival, degree=FUNC_DEFAULT):
     """Draw the current view again (for instance with a different iteration limit), replacing its image and counts
     instead of adding a new view. The new files are written beside the old and moved into place on success."""
     out = START_COPY if item.fname == STARTFILE else item.fname      # (the shipped whole.bmp is never overwritten)
     nu = nu_name(item.fname)
-    problem = render_view(out + '.new', nu + '.new', xval, yval, wval, ival)
+    problem = render_view(out + '.new', nu + '.new', xval, yval, wval, ival, degree)
     if not problem and not (os.path.exists(out + '.new') and os.path.exists(nu + '.new')):
         problem = '{} did not write its output'.format(RENDERER)
     if problem:
@@ -831,6 +878,7 @@ def rerender_in_place(item, xval, yval, wval, ival):
     os.replace(nu + '.new', nu)
     SHOWN[item.fname] = out
     remember(item.fname)
+    remember_func(item.fname)
     item = MAP.update(item, inter.currentIndex())
     item.icon.setIcon(QIcon(load_pixmap(out)))
     fset(item)
@@ -846,15 +894,17 @@ def on_run():
         yval = exact(ybox)
         wval = exact(wbox)
         ival = inter.currentText()
-        if same_region(reg.cand_xyw, MAP.curr.xywd):
+        degree = current_degree()
+        if same_region(reg.cand_xyw, MAP.curr.xywd) and degree == recorded_func(MAP.curr.fname):
             # no new selection: this is the same view, so redraw it in place rather than pile up copies
-            problem = rerender_in_place(MAP.curr, xval, yval, wval, ival)
-        else:
-            problem = render_view(MAP.fname, nu_name(MAP.fname), xval, yval, wval, ival)
+            problem = rerender_in_place(MAP.curr, xval, yval, wval, ival, degree)
+        else:     # (another function over the same region is a new view too, so the earlier picture stays in the history)
+            problem = render_view(MAP.fname, nu_name(MAP.fname), xval, yval, wval, ival, degree)
             if not problem:
                 SHOWN.pop(MAP.fname, None)      # a fresh render replaces any earlier recoloring of this file name
                 MAP.add(XYWD(reg.cand_xyw.x, reg.cand_xyw.y, reg.cand_xyw.w, int(reg.cand_xyw.d)))
                 remember(MAP.curr.fname)
+                remember_func(MAP.curr.fname)
                 scr_layout.insertWidget(0, MAP.curr.icon)
                 fset(MAP.curr)
         if problem:
@@ -900,6 +950,7 @@ def on_open():
         return
     set_color_controls(view['palette'], view['mapping'], view['scale'], view['shift'], view['gamma'], view['brightness'],
                        view['contrast'], view['interior'])      # (the controls change without recoloring the view on screen first)
+    set_function_controls(view['degree'])
     reg.cand_xyw.x, reg.cand_xyw.y, reg.cand_xyw.w = view['x'], view['y'], view['w']
     show_coords(view['x'], view['y'], view['w'])
     inter.setCurrentIndex(MULTIPLIERS.index(view['multiplier']))
@@ -968,6 +1019,18 @@ if __name__ == '__main__':
     inter.currentIndexChanged.connect(on_inter_changed)
     iter_dial.valueChanged.connect(on_dial_changed)
     on_inter_changed(inter.currentIndex())
+    func_box = QComboBox()
+    func_box.addItems(['z\u00b2 + c', 'z^d + c'])
+    func_box.setToolTip('The function whose set is drawn: z\u00b2 + c is the ordinary Mandelbrot set.\nPress Run to draw the chosen function as a new view.')
+    func_box.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
+    func_box.setMinimumContentsLength(6)
+    power_box = QSpinBox()
+    power_box.setRange(POWER_MIN_DEGREE, POWER_MAX_DEGREE)
+    power_box.setValue(3)
+    power_box.setEnabled(False)
+    power_box.setKeyboardTracking(False)
+    power_box.setToolTip('The exponent d in z^d + c (whole numbers {} to {}). Press Run to apply it.'.format(POWER_MIN_DEGREE, POWER_MAX_DEGREE))
+    func_box.currentIndexChanged.connect(on_func_changed)
     pal_box = QComboBox()
     pal_box.addItems(palette_names())
     pal_box.setCurrentText(DEFAULT_COLORS.palette)
@@ -1085,6 +1148,11 @@ if __name__ == '__main__':
     color_form.addRow('Interior:', with_restore(interior_btn, restore_interior_btn))
     color_group = QGroupBox('Colors')
     color_group.setLayout(color_form)
+    func_form = QFormLayout()
+    func_form.addRow('Function:', func_box)
+    func_form.addRow('Exponent d:', power_box)
+    func_group = QGroupBox('Function')
+    func_group.setLayout(func_form)
     iter_form = QFormLayout()
     iter_form.addRow('Multiplier:', inter)
     iter_box = QVBoxLayout()
@@ -1100,6 +1168,7 @@ if __name__ == '__main__':
     controls_layout = QVBoxLayout()
     controls_layout.setContentsMargins(0, 0, 4, 0)
     controls_layout.addWidget(sel_group)
+    controls_layout.addWidget(func_group)
     controls_layout.addWidget(iter_group)
     controls_layout.addWidget(color_group)
     controls_layout.addStretch(1)
@@ -1146,6 +1215,7 @@ if __name__ == '__main__':
     window.setLayout(wholescr) 
     window.setWindowTitle(TITLE)
     window.setStyleSheet(DARK_STYLE)
+    remember_func(STARTFILE)
     remember(STARTFILE)                            # the opening view's settings are the starting ones
     ensure_start_image()
     fset(MAP.curr)

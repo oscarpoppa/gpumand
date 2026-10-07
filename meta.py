@@ -6,23 +6,29 @@ the GUI's Open button can redraw it. The fields are plain ASCII text; the reader
 """
 import struct
 import zlib
+from deepzoom import POWER_MIN_DEGREE, POWER_MAX_DEGREE
 from decimal import Decimal, InvalidOperation
 
 PREFIX = 'mandelbrot.'
-VERSION = '1'
+VERSION = '1'                       # pictures of the plain Mandelbrot map; they carry no function fields
+FUNCTION_VERSION = '2'              # pictures of another function (z^d + c) also carry function and exponent
+VERSIONS = (VERSION, FUNCTION_VERSION)
 MAPPINGS = ('histogram', 'linear', 'log')
+MIN_DEGREE, MAX_DEGREE = POWER_MIN_DEGREE, POWER_MAX_DEGREE
 MAX_TEXT = 5000                     # longest value accepted (a coordinate at width 1e-1000 is ~1100 characters)
 MAX_EXPONENT = 5000
 PNG_SIGNATURE = b'\x89PNG\r\n\x1a\n'
 
 
 def view_text(x, y, w, multiplier, palette, mapping, scale, shift, gamma=1.0, brightness=0.0, contrast=0.0,
-              interior='000000'):
-    """The text fields describing a view, as {key: value}."""
-    return {
+              interior='000000', degree=2):
+    """The text fields describing a view, as {key: value}. A degree other than 2 (z^degree + c) is described by two
+    more fields and format version 2; the plain Mandelbrot map keeps version 1, which older copies of the program read."""
+    plain = degree == 2
+    fields = {
         'Software': 'gpumand',
         'Description': 'Mandelbrot set view: x={} y={} width={} (lower left corner)'.format(x, y, w),
-        PREFIX + 'version': VERSION,
+        PREFIX + 'version': VERSION if plain else FUNCTION_VERSION,
         PREFIX + 'x': str(x),
         PREFIX + 'y': str(y),
         PREFIX + 'width': str(w),
@@ -36,6 +42,11 @@ def view_text(x, y, w, multiplier, palette, mapping, scale, shift, gamma=1.0, br
         PREFIX + 'contrast': '{:g}'.format(float(contrast)),
         PREFIX + 'interior': str(interior),
     }
+    if not plain:
+        fields[PREFIX + 'function'] = 'power'
+        fields[PREFIX + 'exponent'] = str(int(degree))
+        fields['Description'] = 'Mandelbrot-type set view, z^{} + c: x={} y={} width={} (lower left corner)'.format(int(degree), x, y, w)
+    return fields
 
 
 def read_png_text(path):
@@ -104,11 +115,11 @@ def _float(text, name):
 
 def parse_view(text):
     """Check the text fields of a saved view and return them as a dict (x, y, w as Decimals, multiplier an int,
-    palette, mapping, scale, shift, gamma, brightness, contrast, interior). Raises ValueError, with a message fit to show the user, if it is not a
+    palette, mapping, scale, shift, gamma, brightness, contrast, interior, degree). Raises ValueError, with a message fit to show the user, if it is not a
     view this program saved or any field is unusable."""
     if text.get(PREFIX + 'version') is None:
         raise ValueError('this image has no saved Mandelbrot view in it (only images saved by this program do)')
-    if text[PREFIX + 'version'] != VERSION:
+    if text[PREFIX + 'version'] not in VERSIONS:
         raise ValueError('this image was saved by a newer version of the program (format {})'.format(text[PREFIX + 'version']))
     x = _decimal(text.get(PREFIX + 'x'), 'x')
     y = _decimal(text.get(PREFIX + 'y'), 'y')
@@ -144,6 +155,14 @@ def parse_view(text):
     interior = text.get(PREFIX + 'interior', '000000')
     if len(interior) != 6 or any(c not in '0123456789abcdefABCDEF' for c in interior):
         raise ValueError('interior color must be six hex digits')
-    return {'x': x, 'y': y, 'w': w, 'multiplier': multiplier, 'palette': palette, 'mapping': mapping,
+    degree = 2
+    if text[PREFIX + 'version'] == FUNCTION_VERSION:
+        if text.get(PREFIX + 'function') != 'power':
+            raise ValueError('function must be power')
+        exponent = text.get(PREFIX + 'exponent', '')
+        if not exponent.isdigit() or not MIN_DEGREE <= int(exponent) <= MAX_DEGREE:
+            raise ValueError('exponent must be a whole number from {} to {}'.format(MIN_DEGREE, MAX_DEGREE))
+        degree = int(exponent)
+    return {'degree': degree, 'x': x, 'y': y, 'w': w, 'multiplier': multiplier, 'palette': palette, 'mapping': mapping,
             'scale': scale, 'shift': shift, 'gamma': gamma, 'brightness': brightness, 'contrast': contrast,
             'interior': interior.lower()}

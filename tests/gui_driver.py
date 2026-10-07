@@ -1349,6 +1349,91 @@ def drive():
     g['ask_cleanup'] = keep_ask
     g['on_reset']()
 
+    # -- the function: z^2 + c (Mandelbrot) or z^d + c, recorded per view
+    g['on_reset']()
+    fbox, pbox = g['func_box'], g['power_box']
+
+    def render_calls():
+        return [c for c in calls() if c.strip() and c.split()[0] != 'REF_EXISTED']
+    check('the function starts as the ordinary Mandelbrot set, with the exponent box off',
+          fbox.currentIndex() == 0 and not pbox.isEnabled() and g['current_degree']() == 2, (fbox.currentIndex(), pbox.isEnabled()))
+    release(g, 300, 500, 600)
+    g['on_run']()
+    plain_item = MAP.curr
+    if not REAL:
+        check('a plain view is drawn without a function option', '--func' not in render_calls()[-1], render_calls()[-1])
+    check('a plain view is recorded as degree 2', g['recorded_func'](plain_item.fname) == 2)
+    fbox.setCurrentIndex(1)
+    check('choosing z^d + c turns the exponent box on', pbox.isEnabled())
+    check('choosing a function draws nothing yet', MAP.curr is plain_item and len(list(MAP)) == 2)
+    pbox.setValue(3)
+    views_before = len(list(MAP))
+    g['on_run']()
+    cubic_item = MAP.curr
+    check('Run with another function over the same region makes a new view', len(list(MAP)) == views_before + 1 and cubic_item is not plain_item,
+          (views_before, len(list(MAP))))
+    check('the new view is recorded as z^3', g['recorded_func'](cubic_item.fname) == 3 and g['VIEW_FUNC'][cubic_item.fname] == 3)
+    if not REAL:
+        check('the renderer is given a function file', any(a.startswith('--func=') for a in render_calls()[-1].split()), render_calls()[-1])
+        spec = [a for a in render_calls()[-1].split() if a.startswith('--func=')][0][7:]
+        check('and the temporary function file is cleaned up', not os.path.exists(spec), spec)
+    else:
+        check('the picture is not the plain Mandelbrot one', g['image_path'](cubic_item) != g['image_path'](plain_item) and
+              open(g['image_path'](cubic_item), 'rb').read() != open(g['image_path'](plain_item), 'rb').read())
+    release(g, 300, 500, 600)
+    g['on_run']()
+    child = MAP.curr
+    check('a view zoomed from it keeps the function', g['recorded_func'](child.fname) == 3 and pbox.value() == 3 and fbox.currentIndex() == 1)
+    g['fset'](plain_item)
+    check('selecting the plain view\'s thumbnail shows its function', fbox.currentIndex() == 0 and not pbox.isEnabled() and g['current_degree']() == 2)
+    g['fset'](cubic_item)
+    check('selecting the cubic view\'s thumbnail shows z^3 again', fbox.currentIndex() == 1 and pbox.value() == 3 and pbox.isEnabled())
+    # deep views get a reference orbit made for the same function
+    pbox.setValue(5)
+    g['reg'].cand_xyw.x, g['reg'].cand_xyw.y, g['reg'].cand_xyw.w = '-1.2', '-0.3', '1e-30'
+    g['show_coords']('-1.2', '-0.3', '1e-30')
+    nbefore = len(render_calls())
+    g['on_run']()
+    if not REAL:
+        last = render_calls()[nbefore:]
+        parts = last[-1].split() if last else []
+        check('a deep view of z^5 is drawn from a reference orbit and a function file', len(parts) > 5 and parts[5].endswith('.ref') and
+              any(x.startswith('--func=') for x in parts) and 'REF_EXISTED' in calls(), last)
+    check('the deep view is recorded as z^5', g['recorded_func'](MAP.curr.fname) == 5, g['recorded_func'](MAP.curr.fname))
+    # saved pictures carry the function
+    target = os.path.join(saves, 'cubic.png')
+    g['QFileDialog'] = dialog_returning(target)
+    g['fset'](cubic_item)
+    g['on_save']()
+    fields = read_png_text(target)
+    check('the PNG of a z^3 view says so', fields.get('mandelbrot.function') == 'power' and fields.get('mandelbrot.exponent') == '3' and
+          fields.get('mandelbrot.version') == '2', fields)
+    plain_target = os.path.join(saves, 'plain.png')
+    g['QFileDialog'] = dialog_returning(plain_target)
+    g['fset'](plain_item)
+    g['on_save']()
+    fields = read_png_text(plain_target)
+    check('the PNG of a plain view has no function fields and the old version', 'mandelbrot.function' not in fields and
+          'mandelbrot.exponent' not in fields and fields.get('mandelbrot.version') == '1', fields)
+    g['QFileDialog'] = dialog_returning(target)
+    count = len(list(MAP))
+    g['on_open']()
+    check('opening the z^3 PNG draws a z^3 view and shows the function', len(list(MAP)) == count + 1 and g['recorded_func'](MAP.curr.fname) == 3 and
+          fbox.currentIndex() == 1 and pbox.value() == 3, (len(list(MAP)), g['recorded_func'](MAP.curr.fname)))
+    g['QFileDialog'] = dialog_returning(plain_target)
+    g['on_open']()
+    check('opening the plain PNG puts the function back to z^2', g['recorded_func'](MAP.curr.fname) == 2 and fbox.currentIndex() == 0 and not pbox.isEnabled())
+    # deleting a view forgets its function; Reset puts z^2 back
+    gone = MAP.curr
+    g['confirm_delete'] = lambda parent, count, size: True
+    g['on_delete_view'](gone.fname)
+    check('deleting a view forgets its function', gone.fname not in g['VIEW_FUNC'])
+    fbox.setCurrentIndex(1)
+    pbox.setValue(7)
+    g['on_reset']()
+    check('Reset puts the function back to z^2 and forgets every other view\'s', fbox.currentIndex() == 0 and not pbox.isEnabled() and
+          list(g['VIEW_FUNC']) == [g['STARTFILE']] and g['VIEW_FUNC'][g['STARTFILE']] == 2, (fbox.currentIndex(), dict(g['VIEW_FUNC'])))
+
     # -- Reset offers to delete the files of the views it throws away (but keeps the opening view's)
     pix_dir = g['PIX_DIR']
     g['on_reset']()
