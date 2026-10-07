@@ -12,8 +12,8 @@ where ordinary floating point gives up. It runs on a CUDA GPU, or on plain CPU c
 * **Zooms past 1e-1000.** Plain double precision runs out near a view width of 1e-13. Below 1e-9 gpumand switches to *perturbation
   theory*: it works out one exact reference path with arbitrary-precision numbers, and every pixel only tracks its tiny difference from it.
   Coordinates are kept as exact decimals all the way, so repeated zooms never round off.
-* **More than the square.** Besides the ordinary Mandelbrot set (z² + c), the **Exponent d** box draws the sets of z³ + c, z⁴ + c and
-  so on up to z⁶⁴ + c. They zoom as deep as the ordinary one, and each view remembers its own function.
+* **More than the square.** The **Exponent d** box draws the sets of z³ + c, z⁴ + c and so on up to z⁶⁴ + c, as well as the ordinary
+  Mandelbrot set (z² + c, the starting setting). They zoom as deep as the ordinary one, and each view remembers its own exponent.
 * **Smooth, pleasing colors.** Nine palettes, three ways of spreading them over the image, and no color banding. Gamma, brightness,
   contrast and the color of the inside of the set can be adjusted too. Changing a color setting repaints the picture instantly without
   drawing it again.
@@ -71,9 +71,8 @@ Run it:
 | **Save** | Writes the picture on screen as a PNG (see below). |
 | **Open a saved view...** | Draws a view from a PNG this program saved. |
 | **Reset** | Back to the whole set, with every control (exponent, palette, mapping, Scale, Shift, Gamma, Brightness, Contrast, Interior and the iteration multiplier) back to its starting setting. It may ask about old files first, and if you cancel, nothing changes. |
-| Exponent d (in **Function: z^d + c**) | The set of z^d + c, for a whole number d from 2 to 64. It starts at 2, which is the ordinary Mandelbrot set. Nothing changes until you press **Run**, which draws the set for the new exponent as a new view, so the earlier picture stays in the history. A view zoomed from it keeps its exponent, and **Back** and the thumbnails switch the box to each view's own exponent. |
-| Iterations dial / Multiplier | The most iterations a render may use is 2000 times the multiplier, up to 20 million (40 billion iterations). More iterations fill in black areas of deep views but take longer. At the top of the range a view with much of its area inside the set can take hours, because every inside pixel runs to the full limit, and the window stays busy until the render finishes. |
-| Cancel (a slow render) | The window stays alive while a view is drawn. If a render takes more than 15 seconds a **Drawing** dialog appears with a **Cancel** button that stops it and keeps everything as it was; quick renders never show it. Closing the window during a render cancels it first, and a render never keeps running after the program closes or is killed. |
+| Exponent d | The set of z^d + c, for a whole number d from 2 to 64; 2 is the ordinary Mandelbrot set. Press **Run** to draw the new exponent as a new view, so the earlier picture stays in the history. A view zoomed from it keeps its exponent, and **Back** and the thumbnails show each view's own. |
+| Iterations dial / Multiplier | The most iterations a render may use is 2000 times the multiplier, up to 20 million (40 billion iterations). More iterations fill in black areas of deep views but take longer. At the top of the range a view with much of its area inside the set can take hours, because every inside pixel runs to the full limit. If a render takes more than 15 seconds a **Drawing** dialog appears with a **Cancel** button that stops it and leaves everything as it was. |
 | Colors | Palette, mapping, Scale, Shift, Gamma, Brightness, Contrast and Interior. Each change repaints at once. Each setting except the palette and mapping has a **Restore** button that puts it back to its starting value. |
 | **Controls** and **Images** buttons | The side column has two parts that share its height: the controls, and the pictures of the views you have made. Each button shows or hides its part, so one part can have the whole column. Drag the bar between the parts to give either more room (drag it to the end to close a part). One part always stays open, and Run, Back, Save and Reset stay in view either way. |
 
@@ -130,10 +129,10 @@ moves it halfway. The **Restore** button beside the box puts Shift back to its s
 
 ### Saving, reopening and cleaning up
 
-**Save** writes a PNG that remembers its view: the exact coordinates (every digit), the iteration multiplier, the function and the color settings, stored
+**Save** writes a PNG that remembers its view: the exact coordinates (every digit), the iteration multiplier, the exponent and the color settings, stored
 as ordinary PNG text fields that any PNG tool can read (for example `exiftool`). **Open a saved view...** reads them back, checks every field,
 and draws the view again as a new entry in the history. It only opens `.png` files that really are PNGs and that this program saved
-(pictures saved before the function box, or before gamma, brightness, contrast and interior existed, open with the ordinary Mandelbrot set and the starting color values). Redrawing
+(pictures saved before the exponent box, or before gamma, brightness, contrast and interior existed, open as the ordinary Mandelbrot set with the starting values for the rest). Redrawing
 takes as long as the original render did.
 
 Every render leaves files in `pix/`: the picture, plus a `.nu` file of the raw counts that makes recoloring instant. Changing colors replaces a
@@ -180,8 +179,9 @@ differently).
 |---|---|
 | `mand-gui.py` | The window. |
 | `mand-gpu.cu`, `mand-cpu.c` | The GPU and CPU renderers. They share `pert.h` (the per-pixel code), `bla.c`, `colorize.c`, `refio.c`, `funcspec.c`. |
+| `children.py` | Runs the renderer so that it stops when the window closes, is killed, or a render is canceled. |
 | `deepzoom.py` | Reference orbits and exact coordinate math. |
-| `funcspec.c`, `funcspec.h`, `funcspec.py` | The small file that tells a renderer which function to draw (`--func=FILE`); so far z^d + c for whole d from 2 to 64, in both renderers. |
+| `funcspec.c`, `funcspec.h`, `funcspec.py` | The small file that tells a renderer the exponent to use (`--func=FILE`), for z^d + c with d from 2 to 64. |
 | `colorize-main.c`, `colorize.c` | Palettes, mappings, and the recolor tool. |
 | `meta.py` | The view description stored inside saved PNGs. |
 | `cleanup.py` | Which files the program may remove, and how. |
