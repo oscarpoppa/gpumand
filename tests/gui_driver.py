@@ -33,9 +33,10 @@ with fp:
 echo "$@" >> "%s"
 if [ -n "$6" ]; then [ -f "$6" ] && echo "REF_EXISTED" >> "%s"; fi
 if [ -f "%s/fail" ]; then exit 1; fi
+if [ -f "%s/slow" ]; then echo $$ > "%s/slow.pid"; exec sleep 60; fi
 cp "%s/pix/whole.bmp" "$4"
 for a in "$@"; do case "$a" in --nu-out=*) echo counts > "${a#--nu-out=}";; esac; done
-''' % (log, log, tmp, tmp))
+''' % (log, log, tmp, tmp, tmp, tmp))
 if not REAL:
     os.chmod(fake, os.stat(fake).st_mode | stat.S_IXUSR)
 ini = os.path.join(tmp, 'test.ini')
@@ -1349,22 +1350,69 @@ def drive():
     g['ask_cleanup'] = keep_ask
     g['on_reset']()
 
+    # -- a render that takes too long can be canceled, and closing the window during one cancels it
+    if not REAL:
+        import subprocess
+        g['on_reset']()
+        g['CANCEL_SHOWS_AFTER'] = 0.5
+        release(g, 300, 500, 600)
+        slow = os.path.join(tmp, 'slow')
+
+        def renderer_gone():
+            try:
+                pid = int(open(slow + '.pid').read())
+                os.kill(pid, 0)
+                with open('/proc/%d/stat' % pid) as stat:
+                    return stat.read().rsplit(')', 1)[1].split()[0] == 'Z'
+            except (OSError, ValueError):
+                return True
+        open(slow, 'w').close()
+        shown_before, views_before, dialogs_before = MAP.curr, len(list(MAP)), len(dialogs)
+        seen = {}
+
+        def press_cancel():
+            dlg = g['RENDER']['dialog']
+            seen['dialog'] = dlg is not None and dlg.isVisible()
+            seen['modal'] = dlg is not None and dlg.windowModality() == QtCore.Qt.ApplicationModal
+            if dlg is not None:
+                [b for b in dlg.findChildren(QtWidgets.QPushButton) if b.text() == 'Cancel'][0].click()
+        QtCore.QTimer.singleShot(1500, press_cancel)
+        g['on_run']()
+        check('a slow render shows a Cancel dialog after a moment', seen.get('dialog') and seen.get('modal'), seen)
+        check('canceling stops it: no new view, no error dialog', MAP.curr is shown_before and len(list(MAP)) == views_before and len(dialogs) == dialogs_before,
+              (MAP.curr is shown_before, len(list(MAP)), views_before, dialogs[dialogs_before:]))
+        check('the renderer is gone and the dialog with it', renderer_gone() and
+              g['RENDER']['dialog'] is None and not g['rendering']())
+        check('and nothing is left half-drawn in pix', not [f for f in os.listdir(os.path.join(tmp, 'pix')) if f.endswith(('.new', '.func', '.ref'))],
+              os.listdir(os.path.join(tmp, 'pix')))
+        # closing the window mid-render: the render is stopped at once, and the window then closes as usual (with its usual questions)
+        QtCore.QTimer.singleShot(800, window.close)
+        g['on_run']()
+        check('closing the window during a render cancels it', MAP.curr is shown_before and renderer_gone() and len(list(MAP)) == views_before and
+              len(dialogs) == dialogs_before, (MAP.curr is shown_before, len(list(MAP)), views_before))
+        QtWidgets.QApplication.processEvents()
+        check('and then the window closes', not window.isVisible())
+        window.show()
+        QtWidgets.QApplication.processEvents()
+        os.remove(slow)
+        g['on_run']()
+        check('and the next render is ordinary', MAP.curr is not shown_before and len(list(MAP)) == views_before + 1)
+        g['on_reset']()
+
     # -- the function: z^2 + c (Mandelbrot) or z^d + c, recorded per view
     g['on_reset']()
-    fbox, pbox = g['func_box'], g['power_box']
+    pbox = g['power_box']
 
     def render_calls():
         return [c for c in calls() if c.strip() and c.split()[0] != 'REF_EXISTED']
-    check('the function starts as the ordinary Mandelbrot set, with the exponent box off',
-          fbox.currentIndex() == 0 and not pbox.isEnabled() and g['current_degree']() == 2, (fbox.currentIndex(), pbox.isEnabled()))
+    check('the exponent starts at 2, the ordinary Mandelbrot set', pbox.value() == 2 and g['current_degree']() == 2 and pbox.minimum() == 2 and
+          pbox.maximum() == 64, pbox.value())
     release(g, 300, 500, 600)
     g['on_run']()
     plain_item = MAP.curr
     if not REAL:
         check('a plain view is drawn without a function option', '--func' not in render_calls()[-1], render_calls()[-1])
     check('a plain view is recorded as degree 2', g['recorded_func'](plain_item.fname) == 2)
-    fbox.setCurrentIndex(1)
-    check('choosing z^d + c turns the exponent box on', pbox.isEnabled())
     check('choosing a function draws nothing yet', MAP.curr is plain_item and len(list(MAP)) == 2)
     pbox.setValue(3)
     views_before = len(list(MAP))
@@ -1383,11 +1431,11 @@ def drive():
     release(g, 300, 500, 600)
     g['on_run']()
     child = MAP.curr
-    check('a view zoomed from it keeps the function', g['recorded_func'](child.fname) == 3 and pbox.value() == 3 and fbox.currentIndex() == 1)
+    check('a view zoomed from it keeps the function', g['recorded_func'](child.fname) == 3 and pbox.value() == 3)
     g['fset'](plain_item)
-    check('selecting the plain view\'s thumbnail shows its function', fbox.currentIndex() == 0 and not pbox.isEnabled() and g['current_degree']() == 2)
+    check('selecting the plain view\'s thumbnail shows its function', pbox.value() == 2 and g['current_degree']() == 2)
     g['fset'](cubic_item)
-    check('selecting the cubic view\'s thumbnail shows z^3 again', fbox.currentIndex() == 1 and pbox.value() == 3 and pbox.isEnabled())
+    check('selecting the cubic view\'s thumbnail shows z^3 again', pbox.value() == 3)
     # deep views get a reference orbit made for the same function
     pbox.setValue(5)
     g['reg'].cand_xyw.x, g['reg'].cand_xyw.y, g['reg'].cand_xyw.w = '-1.2', '-0.3', '1e-30'
@@ -1419,20 +1467,19 @@ def drive():
     count = len(list(MAP))
     g['on_open']()
     check('opening the z^3 PNG draws a z^3 view and shows the function', len(list(MAP)) == count + 1 and g['recorded_func'](MAP.curr.fname) == 3 and
-          fbox.currentIndex() == 1 and pbox.value() == 3, (len(list(MAP)), g['recorded_func'](MAP.curr.fname)))
+          pbox.value() == 3, (len(list(MAP)), g['recorded_func'](MAP.curr.fname)))
     g['QFileDialog'] = dialog_returning(plain_target)
     g['on_open']()
-    check('opening the plain PNG puts the function back to z^2', g['recorded_func'](MAP.curr.fname) == 2 and fbox.currentIndex() == 0 and not pbox.isEnabled())
+    check('opening the plain PNG puts the function back to z^2', g['recorded_func'](MAP.curr.fname) == 2 and pbox.value() == 2)
     # deleting a view forgets its function; Reset puts z^2 back
     gone = MAP.curr
     g['confirm_delete'] = lambda parent, count, size: True
     g['on_delete_view'](gone.fname)
     check('deleting a view forgets its function', gone.fname not in g['VIEW_FUNC'])
-    fbox.setCurrentIndex(1)
     pbox.setValue(7)
     g['on_reset']()
-    check('Reset puts the function back to z^2 and forgets every other view\'s', fbox.currentIndex() == 0 and not pbox.isEnabled() and
-          list(g['VIEW_FUNC']) == [g['STARTFILE']] and g['VIEW_FUNC'][g['STARTFILE']] == 2, (fbox.currentIndex(), dict(g['VIEW_FUNC'])))
+    check('Reset puts the function back to z^2 and forgets every other view\'s', pbox.value() == 2 and
+          list(g['VIEW_FUNC']) == [g['STARTFILE']] and g['VIEW_FUNC'][g['STARTFILE']] == 2, (pbox.value(), dict(g['VIEW_FUNC'])))
 
     # -- Reset offers to delete the files of the views it throws away (but keeps the opening view's)
     pix_dir = g['PIX_DIR']
