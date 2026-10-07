@@ -33,9 +33,10 @@ with fp:
 echo "$@" >> "%s"
 if [ -n "$6" ]; then [ -f "$6" ] && echo "REF_EXISTED" >> "%s"; fi
 if [ -f "%s/fail" ]; then exit 1; fi
+if [ -f "%s/slow" ]; then echo $$ > "%s/slow.pid"; exec sleep 60; fi
 cp "%s/pix/whole.bmp" "$4"
 for a in "$@"; do case "$a" in --nu-out=*) echo counts > "${a#--nu-out=}";; esac; done
-''' % (log, log, tmp, tmp))
+''' % (log, log, tmp, tmp, tmp, tmp))
 if not REAL:
     os.chmod(fake, os.stat(fake).st_mode | stat.S_IXUSR)
 ini = os.path.join(tmp, 'test.ini')
@@ -1348,6 +1349,51 @@ def drive():
     check('a canceled Reset leaves every control as it was', everything() == mid and len(list(MAP)) == 2, everything())
     g['ask_cleanup'] = keep_ask
     g['on_reset']()
+
+    # -- a render that takes too long can be canceled, and closing the window during one cancels it
+    if not REAL:
+        import subprocess
+        g['on_reset']()
+        release(g, 300, 500, 600)
+        slow = os.path.join(tmp, 'slow')
+
+        def renderer_gone():
+            try:
+                pid = int(open(slow + '.pid').read())
+                os.kill(pid, 0)
+                with open('/proc/%d/stat' % pid) as stat:
+                    return stat.read().rsplit(')', 1)[1].split()[0] == 'Z'
+            except (OSError, ValueError):
+                return True
+        open(slow, 'w').close()
+        shown_before, views_before, dialogs_before = MAP.curr, len(list(MAP)), len(dialogs)
+        seen = {}
+
+        def press_cancel():
+            dlg = g['RENDER']['dialog']
+            seen['dialog'] = dlg is not None and dlg.isVisible()
+            seen['modal'] = dlg is not None and dlg.windowModality() == QtCore.Qt.ApplicationModal
+            if dlg is not None:
+                dlg.cancel()
+        QtCore.QTimer.singleShot(1500, press_cancel)
+        g['on_run']()
+        check('a slow render shows a Cancel dialog after a moment', seen.get('dialog') and seen.get('modal'), seen)
+        check('canceling stops it: no new view, no error dialog', MAP.curr is shown_before and len(list(MAP)) == views_before and len(dialogs) == dialogs_before,
+              (MAP.curr is shown_before, len(list(MAP)), views_before, dialogs[dialogs_before:]))
+        check('the renderer is gone and the dialog with it', renderer_gone() and
+              g['RENDER']['dialog'] is None and not g['rendering']())
+        check('and nothing is left half-drawn in pix', not [f for f in os.listdir(os.path.join(tmp, 'pix')) if f.endswith(('.new', '.func', '.ref'))],
+              os.listdir(os.path.join(tmp, 'pix')))
+        # closing the window mid-render: the render is stopped and the window stays (it closes on the next, ordinary, close)
+        QtCore.QTimer.singleShot(800, window.close)
+        g['on_run']()
+        check('closing the window during a render cancels it and leaves the window open', window.isVisible() and MAP.curr is shown_before and
+              renderer_gone(),
+              (window.isVisible(), MAP.curr is shown_before))
+        os.remove(slow)
+        g['on_run']()
+        check('and the next render is ordinary', MAP.curr is not shown_before and len(list(MAP)) == views_before + 1)
+        g['on_reset']()
 
     # -- the function: z^2 + c (Mandelbrot) or z^d + c, recorded per view
     g['on_reset']()
