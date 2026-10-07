@@ -12,6 +12,8 @@ where ordinary floating point gives up. It runs on a CUDA GPU, or on plain CPU c
 * **Zooms past 1e-1000.** Plain double precision runs out near a view width of 1e-13. Below 1e-9 gpumand switches to *perturbation
   theory*: it works out one exact reference path with arbitrary-precision numbers, and every pixel only tracks its tiny difference from it.
   Coordinates are kept as exact decimals all the way, so repeated zooms never round off.
+* **More than the square.** Besides the ordinary Mandelbrot set (z² + c), the **Function** box draws the sets of z³ + c, z⁴ + c and
+  so on up to z⁶⁴ + c. They zoom as deep as the ordinary one, and each view remembers its own function.
 * **Smooth, pleasing colors.** Nine palettes, three ways of spreading them over the image, and no color banding. Gamma, brightness,
   contrast and the color of the inside of the set can be adjusted too. Changing a color setting repaints the picture instantly without
   drawing it again.
@@ -68,7 +70,8 @@ Run it:
 | **Back**, thumbnails | Return to an earlier view. Every control (coordinates, multiplier, and every color setting) then shows that view's own settings, and a region boxed from it starts from them, not from whatever you used last. The selected thumbnail has a tiny **×** in its corner: it deletes that view and all of its files (after asking), and shows the view before it. Views that were zoomed from the deleted one now hang from its parent, so **Back** always goes to the next real view back. The opening view has no ×. |
 | **Save** | Writes the picture on screen as a PNG (see below). |
 | **Open a saved view...** | Draws a view from a PNG this program saved. |
-| **Reset** | Back to the whole set, with every control (palette, mapping, Scale, Shift, Gamma, Brightness, Contrast, Interior and the iteration multiplier) back to its starting setting. It may ask about old files first, and if you cancel, nothing changes. |
+| **Reset** | Back to the whole set, with every control (function, palette, mapping, Scale, Shift, Gamma, Brightness, Contrast, Interior and the iteration multiplier) back to its starting setting. It may ask about old files first, and if you cancel, nothing changes. |
+| Function / Exponent d | **z² + c** is the ordinary Mandelbrot set. Choose **z^d + c** and set the exponent d (a whole number from 2 to 64) to draw that set instead; nothing changes until you press **Run**, which draws it as a new view, so the earlier picture stays in the history. A view zoomed from it keeps its function, and **Back** and the thumbnails switch the box to each view's own function. |
 | Iterations dial / Multiplier | The most iterations a render may use is 2000 times the multiplier, up to 20 million (40 billion iterations). More iterations fill in black areas of deep views but take longer. At the top of the range a view with much of its area inside the set can take hours, because every inside pixel runs to the full limit, and the window stays busy until the render finishes. |
 | Colors | Palette, mapping, Scale, Shift, Gamma, Brightness, Contrast and Interior. Each change repaints at once. Each setting except the palette and mapping has a **Restore** button that puts it back to its starting value. |
 | **Controls** and **Images** buttons | The side column has two parts that share its height: the controls, and the pictures of the views you have made. Each button shows or hides its part, so one part can have the whole column. Drag the bar between the parts to give either more room (drag it to the end to close a part). One part always stays open, and Run, Back, Save and Reset stay in view either way. |
@@ -126,10 +129,10 @@ moves it halfway. The **Restore** button beside the box puts Shift back to its s
 
 ### Saving, reopening and cleaning up
 
-**Save** writes a PNG that remembers its view: the exact coordinates (every digit), the iteration multiplier, and the color settings, stored
+**Save** writes a PNG that remembers its view: the exact coordinates (every digit), the iteration multiplier, the function and the color settings, stored
 as ordinary PNG text fields that any PNG tool can read (for example `exiftool`). **Open a saved view...** reads them back, checks every field,
 and draws the view again as a new entry in the history. It only opens `.png` files that really are PNGs and that this program saved
-(pictures saved before gamma, brightness, contrast and interior existed open with those at their starting values). Redrawing
+(pictures saved before the function box, or before gamma, brightness, contrast and interior existed, open with the ordinary Mandelbrot set and the starting color values). Redrawing
 takes as long as the original render did.
 
 Every render leaves files in `pix/`: the picture, plus a `.nu` file of the raw counts that makes recoloring instant. Changing colors replaces a

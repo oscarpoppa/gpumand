@@ -120,6 +120,30 @@ class Meta(unittest.TestCase):
         got = meta.parse_view(old)
         self.assertEqual((got['gamma'], got['brightness'], got['contrast'], got['interior']), (1.0, 0.0, 0.0, '000000'))
 
+    def test_a_plain_view_keeps_format_one_and_has_no_function_fields(self):
+        self.assertEqual(GOOD['mandelbrot.version'], '1')
+        self.assertFalse([k for k in GOOD if k.endswith(('function', 'exponent'))])
+        self.assertEqual(meta.parse_view(GOOD)['degree'], 2)
+
+    def test_a_power_view_survives_a_png(self):
+        for degree in (3, 17, 64):
+            fields = meta.view_text('0', '0', '2', 1, 'ocean', 'linear', 0, 0, degree=degree)
+            self.assertEqual((fields['mandelbrot.version'], fields['mandelbrot.function'], fields['mandelbrot.exponent']),
+                             ('2', 'power', str(degree)))
+            self.assertEqual(meta.parse_view(meta.read_png_text(self.fields_png(fields)))['degree'], degree)
+
+    def test_bad_function_fields_are_refused(self):
+        good = meta.view_text('0', '0', '2', 1, 'ocean', 'linear', 0, 0, degree=3)
+        for label, change in {'exponent 1': {'mandelbrot.exponent': '1'}, 'exponent 65': {'mandelbrot.exponent': '65'},
+                              'exponent text': {'mandelbrot.exponent': 'x'}, 'exponent negative': {'mandelbrot.exponent': '-3'},
+                              'exponent fractional': {'mandelbrot.exponent': '2.5'}, 'exponent empty': {'mandelbrot.exponent': ''},
+                              'unknown function': {'mandelbrot.function': 'sin'}}.items():
+            with self.assertRaises(ValueError, msg=label):
+                meta.parse_view(dict(good, **change))
+        for key in ('mandelbrot.function', 'mandelbrot.exponent'):
+            with self.assertRaises(ValueError, msg=key):
+                meta.parse_view({k: v for k, v in good.items() if k != key})
+
     def test_bad_fields_are_refused_with_a_reason(self):
         bad = {'no version at all': None, 'x is not a number': {'mandelbrot.x': 'abc'}, 'x is NaN': {'mandelbrot.x': 'NaN'},
                'x is infinite': {'mandelbrot.x': 'Infinity'}, 'x has a huge exponent': {'mandelbrot.x': '1e99999'},
@@ -129,7 +153,7 @@ class Meta(unittest.TestCase):
                'palette is empty': {'mandelbrot.palette': ''}, 'palette has a path in it': {'mandelbrot.palette': '../x'},
                'palette is too long': {'mandelbrot.palette': 'p' * 40}, 'mapping is unknown': {'mandelbrot.mapping': 'sparkle'},
                'scale is negative': {'mandelbrot.scale': '-1'}, 'scale is NaN': {'mandelbrot.scale': 'nan'},
-               'shift is text': {'mandelbrot.shift': 'x'}, 'format is newer': {'mandelbrot.version': '2'},
+               'shift is text': {'mandelbrot.shift': 'x'}, 'format is newer': {'mandelbrot.version': '3'},
                'gamma is zero': {'mandelbrot.gamma': '0'}, 'gamma is huge': {'mandelbrot.gamma': '11'},
                'gamma is text': {'mandelbrot.gamma': 'x'}, 'brightness is too high': {'mandelbrot.brightness': '101'},
                'brightness is NaN': {'mandelbrot.brightness': 'nan'}, 'contrast is too low': {'mandelbrot.contrast': '-101'},
