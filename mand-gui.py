@@ -165,7 +165,7 @@ FUNC_DEFAULT = 2
 
 
 def current_degree():
-    return FUNC_DEFAULT if func_box.currentIndex() == 0 else power_box.value()
+    return power_box.value()
 
 
 def remember_func(fname):
@@ -178,18 +178,9 @@ def recorded_func(fname):
 
 def set_function_controls(degree):
     """Show this function in the Function box without drawing anything."""
-    for box in (func_box, power_box):
-        box.blockSignals(True)
-    func_box.setCurrentIndex(0 if degree == FUNC_DEFAULT else 1)
-    power_box.setValue(max(degree, POWER_MIN_DEGREE))
-    power_box.setEnabled(degree != FUNC_DEFAULT)
-    for box in (func_box, power_box):
-        box.blockSignals(False)
-
-
-def on_func_changed(*_):
-    """A new function is chosen: it applies to the next Run (which draws a new view), not to the picture on screen."""
-    power_box.setEnabled(func_box.currentIndex() == 1)
+    power_box.blockSignals(True)
+    power_box.setValue(degree)
+    power_box.blockSignals(False)
 
 
 def interior_hex():
@@ -836,7 +827,7 @@ def on_reset():
 # While the renderer runs the window stays alive (it redraws, and a dialog with a Cancel button appears if the render
 # is slow), so a render that will take hours can be stopped. Nothing else can be clicked meanwhile.
 RENDER = {'since': None, 'dialog': None, 'canceled': False}
-CANCEL_SHOWS_AFTER = 0.5        # seconds before the Cancel dialog appears (quick renders never show it)
+CANCEL_SHOWS_AFTER = 15         # seconds before the Cancel dialog appears (ordinary renders never show it)
 CANCELED_PROBLEM = 'canceled'
 
 
@@ -856,7 +847,7 @@ def keep_responsive():
     # until the dialog is up, clicks and keys are ignored rather than starting something else in the middle of a render
     flags = QEventLoop.AllEvents if RENDER['dialog'] else QEventLoop.ExcludeUserInputEvents
     QApplication.processEvents(flags)
-    return RENDER['canceled']
+    return RENDER['canceled'] or (RENDER['dialog'] is not None and RENDER['dialog'].wasCanceled())
 
 
 def rendering():
@@ -1063,18 +1054,12 @@ if __name__ == '__main__':
     inter.currentIndexChanged.connect(on_inter_changed)
     iter_dial.valueChanged.connect(on_dial_changed)
     on_inter_changed(inter.currentIndex())
-    func_box = QComboBox()
-    func_box.addItems(['z\u00b2 + c', 'z^d + c'])
-    func_box.setToolTip('The function whose set is drawn: z\u00b2 + c is the ordinary Mandelbrot set.\nPress Run to draw the chosen function as a new view.')
-    func_box.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
-    func_box.setMinimumContentsLength(6)
     power_box = QSpinBox()
     power_box.setRange(POWER_MIN_DEGREE, POWER_MAX_DEGREE)
-    power_box.setValue(3)
-    power_box.setEnabled(False)
+    power_box.setValue(FUNC_DEFAULT)
     power_box.setKeyboardTracking(False)
-    power_box.setToolTip('The exponent d in z^d + c (whole numbers {} to {}). Press Run to apply it.'.format(POWER_MIN_DEGREE, POWER_MAX_DEGREE))
-    func_box.currentIndexChanged.connect(on_func_changed)
+    power_box.setToolTip('The exponent d in z^d + c (whole numbers {} to {}). 2 is the ordinary Mandelbrot set.\n'
+                         'Press Run to draw the set for another exponent as a new view.'.format(POWER_MIN_DEGREE, POWER_MAX_DEGREE))
     pal_box = QComboBox()
     pal_box.addItems(palette_names())
     pal_box.setCurrentText(DEFAULT_COLORS.palette)
@@ -1193,9 +1178,8 @@ if __name__ == '__main__':
     color_group = QGroupBox('Colors')
     color_group.setLayout(color_form)
     func_form = QFormLayout()
-    func_form.addRow('Function:', func_box)
     func_form.addRow('Exponent d:', power_box)
-    func_group = QGroupBox('Function')
+    func_group = QGroupBox('Function: z^d + c')
     func_group.setLayout(func_form)
     iter_form = QFormLayout()
     iter_form.addRow('Multiplier:', inter)
