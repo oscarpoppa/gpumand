@@ -1422,6 +1422,36 @@ def drive():
         check('and the next render is ordinary', MAP.curr is not shown_before and len(list(MAP)) == views_before + 1)
         g['on_reset']()
 
+    def render_calls():
+        return [c for c in calls() if c.strip() and c.split()[0] != 'REF_EXISTED']
+    # -- a number typed into a box and followed straight by Enter (which runs the view) is used, not lost
+    g['on_reset']()
+    pbox = g['power_box']
+    release(g, 300, 500, 600)
+    pbox.lineEdit().selectAll()
+    pbox.lineEdit().setText('5')                    # typed, not yet accepted
+    check('typed text is not yet the box\'s value (the situation Enter finds)', pbox.value() == 2, pbox.value())
+    g['on_run']()
+    check('Run takes the typed exponent: the view is z^5 and the box still says 5', g['recorded_func'](MAP.curr.fname) == 5 and pbox.value() == 5 and
+          pbox.lineEdit().text() == '5', (g['recorded_func'](MAP.curr.fname), pbox.value(), pbox.lineEdit().text()))
+    if not REAL:
+        check('the renderer was given the exponent 5', any(a.startswith('--func=') for a in render_calls()[-1].split()))
+    gbox = g['gamma_box']
+    release(g, 300, 500, 600)
+    gbox.lineEdit().setText('2.5')
+    g['on_run']()
+    check('a typed color value is used by Run too', abs(gbox.value() - 2.5) < 1e-9 and abs(g['recorded'](MAP.curr.fname).gamma - 2.5) < 1e-9,
+          (gbox.value(), g['recorded'](MAP.curr.fname)))
+    # and through the real Enter shortcut of the window
+    g['on_reset']()
+    release(g, 300, 500, 600)
+    pbox.lineEdit().setText('3')
+    count = len(list(MAP))
+    g['run_keys'][0].activated.emit()                # (what pressing Enter does: the window's Return shortcut presses Run)
+    check('Enter in the window runs the typed exponent', len(list(MAP)) == count + 1 and g['recorded_func'](MAP.curr.fname) == 3 and pbox.value() == 3,
+          (len(list(MAP)), count, g['recorded_func'](MAP.curr.fname), pbox.value()))
+    g['on_reset']()
+
     # -- the function: z^2 + c (Mandelbrot) or z^d + c, recorded per view
     g['on_reset']()
     pbox = g['power_box']

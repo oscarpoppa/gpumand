@@ -948,9 +948,17 @@ def rerender_in_place(item, xval, yval, wval, ival, degree=FUNC_DEFAULT):
     return None
 
 
+def commit_typing():
+    """Take any number typed into a box but not yet accepted. Enter runs the view (a window shortcut) before a box
+    gets to accept what was typed, so without this the render would use, and the controls would go back to, the old value."""
+    for box in (power_box, scale_box, shift_box, gamma_box, brightness_box, contrast_box):
+        box.interpretText()
+
+
 @pyqtSlot()
 def on_run():
     global MAP
+    commit_typing()
     with WaitCurs():
         reg.cand_xyw.d = inter.currentIndex()
         xval = exact(xbox)
