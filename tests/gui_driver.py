@@ -1394,6 +1394,29 @@ def drive():
         check('and then the window closes', not window.isVisible())
         window.show()
         QtWidgets.QApplication.processEvents()
+        # the dialog's close button and Esc only put it away: the render carries on, and closing the main window still cancels it
+        for how in ('close button', 'Esc'):
+            released = {}
+
+            def put_away(how=how, released=released):
+                dlg = g['RENDER']['dialog']
+                if how == 'Esc':
+                    dlg.reject()                 # (what Esc does in a dialog)
+                else:
+                    dlg.close()
+                QtWidgets.QApplication.processEvents()
+                released['hidden'] = not dlg.isVisible()
+                released['canceled'] = g['RENDER']['canceled']
+                released['running'] = g['rendering']() and not renderer_gone()
+            QtCore.QTimer.singleShot(1000, put_away)
+            QtCore.QTimer.singleShot(2000, window.close)
+            g['on_run']()
+            check('the dialog\'s %s puts it away without canceling the render' % how, released == {'hidden': True, 'canceled': False, 'running': True}, released)
+            check('and the render then stops when the main window is closed (%s)' % how, MAP.curr is shown_before and renderer_gone() and
+                  len(list(MAP)) == views_before and len(dialogs) == dialogs_before)
+            QtWidgets.QApplication.processEvents()
+            window.show()
+            QtWidgets.QApplication.processEvents()
         os.remove(slow)
         g['on_run']()
         check('and the next render is ordinary', MAP.curr is not shown_before and len(list(MAP)) == views_before + 1)

@@ -831,23 +831,53 @@ CANCEL_SHOWS_AFTER = 15         # seconds before the Cancel dialog appears (ordi
 CANCELED_PROBLEM = 'canceled'
 
 
+class RenderDialog(QProgressDialog):
+    """The Drawing dialog. Its Cancel button cancels the render; the window's close button and Esc only put the
+    dialog away (the render carries on, and closing the main window still cancels it)."""
+    finished = False
+
+    def closeEvent(self, event):
+        if self.finished:
+            event.accept()
+        else:
+            event.ignore()      # (not the base class's: it would report a cancel)
+            self.hide()
+
+    def reject(self):
+        if not self.finished:
+            self.hide()
+
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key_Escape:
+            self.reject()
+        else:
+            super().keyPressEvent(event)
+
+    def finish(self):
+        self.finished = True
+        self.close()
+        self.deleteLater()
+
+
 def keep_responsive():
     """Called every few hundredths of a second while the renderer runs. True once the user has canceled."""
     if RENDER['dialog'] is None and time.time() - RENDER['since'] > CANCEL_SHOWS_AFTER:
-        dlg = QProgressDialog('Drawing the view...\n\nDeep views and high iteration limits can take a very long time.',
+        dlg = RenderDialog('Drawing the view...\n\nDeep views and high iteration limits can take a very long time.',
                               'Cancel', 0, 0, window)
         dlg.setWindowTitle('Drawing')
         dlg.setWindowModality(Qt.ApplicationModal)
         dlg.setMinimumDuration(0)
         dlg.setAutoClose(False)
         dlg.setAutoReset(False)
-        dlg.canceled.connect(lambda: RENDER.update(canceled=True))
+        button = QPushButton('Cancel')           # (only a click on this cancels: Esc and the close button just put the dialog away)
+        dlg.setCancelButton(button)
+        button.clicked.connect(lambda: RENDER.update(canceled=True))
         dlg.show()
         RENDER['dialog'] = dlg
-    # until the dialog is up, clicks and keys are ignored rather than starting something else in the middle of a render
-    flags = QEventLoop.AllEvents if RENDER['dialog'] else QEventLoop.ExcludeUserInputEvents
+    # unless the dialog is up, clicks and keys are ignored rather than starting something else in the middle of a render
+    flags = QEventLoop.AllEvents if RENDER['dialog'] is not None and RENDER['dialog'].isVisible() else QEventLoop.ExcludeUserInputEvents
     QApplication.processEvents(flags)
-    return RENDER['canceled'] or (RENDER['dialog'] is not None and RENDER['dialog'].wasCanceled())
+    return RENDER['canceled']
 
 
 def rendering():
@@ -882,8 +912,7 @@ def render_view(out, nu, xval, yval, wval, ival, degree=FUNC_DEFAULT):
         problem = 'cannot run {}: {}'.format(cmd[0], e)
     finally:
         if RENDER['dialog'] is not None:
-            RENDER['dialog'].close()
-            RENDER['dialog'].deleteLater()
+            RENDER['dialog'].finish()
         RENDER.update(since=None, dialog=None)
         for temporary in (refname, specname):
             if temporary and os.path.exists(temporary):
@@ -1178,8 +1207,13 @@ if __name__ == '__main__':
     color_group = QGroupBox('Colors')
     color_group.setLayout(color_form)
     func_form = QFormLayout()
+    func_label = QLabel('<i>z</i><sup><i>d</i></sup> + <i>c</i>')       # (Qt's rich text: z to the d, plus c)
+    func_label.setTextFormat(Qt.RichText)
+    func_label.setAlignment(Qt.AlignCenter)
+    func_label.setStyleSheet('font-size: 18px;')
+    func_form.addRow(func_label)
     func_form.addRow('Exponent d:', power_box)
-    func_group = QGroupBox('Function: z^d + c')
+    func_group = QGroupBox('Function')
     func_group.setLayout(func_form)
     iter_form = QFormLayout()
     iter_form.addRow('Multiplier:', inter)
