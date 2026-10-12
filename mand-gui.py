@@ -14,10 +14,10 @@ from collections import namedtuple
 from math import ceil
 from configparser import ConfigParser
 from optparse import OptionParser
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation, localcontext
 from cleanup import delete_files, generated_files, move_files, new_folder, split_images, view_files, remove_stale_references, size_text, total_size
 from meta import parse_view, read_png_text, view_text
-from deepzoom import abbreviate, ITERATIONS, WIDTH, HEIGHT, PERTURB_BELOW, POWER_MIN_DEGREE, POWER_MAX_DEGREE, selection_to_region, write_reference
+from deepzoom import abbreviate, digits_for, ITERATIONS, WIDTH, HEIGHT, PERTURB_BELOW, POWER_MIN_DEGREE, POWER_MAX_DEGREE, selection_to_region, write_reference
 from funcspec import write_power_spec
 
 
@@ -709,14 +709,111 @@ class SplitPanes(object):
             self.split.setSizes(sizes)
 
 
+COORD_TIP = 'Click to type a value (exact decimals, such as -0.75 or 1e-30), then press Enter or Run.'
+MAX_COORD = Decimal('1e6')              # the corner can be anywhere a double can follow it
+MIN_WIDTH, MAX_WIDTH = Decimal('1e-4000'), Decimal('1e6')       # (a saved PNG can hold exponents to 5000)
+
+
 def show_coords(x, y, w):
-    """Fill the read-only coordinate boxes. A very long value is shown abbreviated (leading digits, an ellipsis,
+    """Fill the coordinate boxes. A very long value is shown abbreviated (leading digits, an ellipsis,
     trailing digits, and its power of ten); the exact text is kept on the box and in its tooltip."""
     for box, value in ((xbox, x), (ybox, y), (wbox, w)):
-        box.setText(abbreviate(value))
-        box.setToolTip(str(value))
-        box.setProperty('exact', str(value))
-        box.setCursorPosition(0)
+        box.show_exact(str(value))
+
+
+def parse_coord(text, name):
+    """The Decimal a typed coordinate stands for. Raises ValueError with a message fit to show."""
+    text = text.strip().replace(' ', '')
+    if not text:
+        raise ValueError('type a number')
+    try:
+        value = Decimal(text)
+    except InvalidOperation:
+        raise ValueError('"{}" is not a number'.format(text[:30]))
+    if not value.is_finite():
+        raise ValueError('not an ordinary number')
+    if name == 'width':
+        if not MIN_WIDTH <= value <= MAX_WIDTH:
+            raise ValueError('the width must be from 1e-4000 to 1e6')
+    elif abs(value) > MAX_COORD:
+        raise ValueError('must be between -1e6 and 1e6')
+    return value
+
+
+def typed_coordinate(name, value):
+    """The view's (x, y, w) after a typed value for x, y or the width. A new width keeps the view's center, so typing
+    a width zooms in or out around what you are looking at; x and y are the lower-left corner."""
+    x, y, w = (Decimal(exact(box)) for box in (xbox, ybox, wbox))
+    if name == 'x':
+        x = value
+    elif name == 'y':
+        y = value
+    else:
+        with localcontext() as ctx:
+            ctx.prec = digits_for(min(w, value)) + 5
+            cx, cy = x + w / 2, y + w * PIX_HGT / (2 * PIX_WID)
+            x, y, w = cx - value / 2, cy - value * PIX_HGT / (2 * PIX_WID), value
+    return x, y, w
+
+
+class CoordBox(QLineEdit):
+    """X, Y or Width. At rest it shows a long value abbreviated; click it to see and edit the whole value. Enter, Tab
+    or clicking away accepts it (a bad value is refused with a reason and the old one comes back); Esc gives up."""
+
+    def __init__(self, name):
+        QLineEdit.__init__(self)
+        self.name = name
+        self.setMaxLength(5000)
+        self.setToolTip(COORD_TIP)
+        self.returnPressed.connect(self.commit)
+
+    def show_exact(self, text):
+        text = text.replace('E', 'e')
+        self.setProperty('exact', text)
+        self.setToolTip(text + '\n\n' + COORD_TIP)
+        self.setStyleSheet('')
+        self.setText(text if self.hasFocus() else abbreviate(text))
+        self.setCursorPosition(0)
+
+    def focusInEvent(self, event):
+        QLineEdit.focusInEvent(self, event)
+        self.setText(exact(self) or '')
+        QTimer.singleShot(0, self.selectAll)
+
+    def focusOutEvent(self, event):
+        self.commit()
+        QLineEdit.focusOutEvent(self, event)
+        self.setText(abbreviate(exact(self)))
+        self.setCursorPosition(0)
+
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key_Escape:
+            self.setText(exact(self))
+            self.setStyleSheet('')
+            self.clearFocus()
+        else:
+            QLineEdit.keyPressEvent(self, event)
+
+    def commit(self):
+        """Accept what was typed, if it is a different valid value. True if the view's numbers changed."""
+        text = self.text()
+        if not self.hasFocus() and text == abbreviate(exact(self)):
+            return False                                    # (what is showing is only the short form: nothing was typed)
+        if text.strip() == exact(self):
+            return False
+        try:
+            x, y, w = typed_coordinate(self.name, parse_coord(text, self.name))
+        except (ValueError, InvalidOperation) as e:
+            self.setStyleSheet('border: 1px solid #d9534f;')
+            self.setToolTip(str(e))
+            self.setText(exact(self))                       # the old value comes back
+            QTimer.singleShot(1500, lambda: self.setStyleSheet('') or self.setToolTip(exact(self) + '\n\n' + COORD_TIP))
+            return False
+        reg.rubberBand.hide()
+        reg.cand_xyw.x, reg.cand_xyw.y, reg.cand_xyw.w = x, y, w
+        reg.cand_xyw.d = inter.currentIndex()
+        show_coords(x, y, w)
+        return True
 
 
 def exact(box):
@@ -951,6 +1048,8 @@ def rerender_in_place(item, xval, yval, wval, ival, degree=FUNC_DEFAULT):
 def commit_typing():
     """Take any number typed into a box but not yet accepted. Enter runs the view (a window shortcut) before a box
     gets to accept what was typed, so without this the render would use, and the controls would go back to, the old value."""
+    for box in (xbox, ybox, wbox):
+        box.commit()
     for box in (power_box, scale_box, shift_box, gamma_box, brightness_box, contrast_box):
         box.interpretText()
 
@@ -1069,12 +1168,9 @@ if __name__ == '__main__':
     open_btn = QPushButton('Open a saved view\u2026')
     open_btn.clicked.connect(on_open)
     open_btn.setToolTip('Open a PNG saved by this program and draw the view it describes')
-    xbox = QLineEdit()
-    xbox.setReadOnly(True) 
-    ybox = QLineEdit()
-    ybox.setReadOnly(True) 
-    wbox = QLineEdit()
-    wbox.setReadOnly(True) 
+    xbox = CoordBox('x')
+    ybox = CoordBox('y')
+    wbox = CoordBox('width')
     inter = QComboBox()
     inter.addItems([str(n) for n in MULTIPLIERS])
     inter.setSizeAdjustPolicy(QComboBox.AdjustToContents)
