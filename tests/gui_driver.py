@@ -280,7 +280,7 @@ def drive():
     if not REAL:
         check('the render was given the full digits, not the short form',
               xfull in deep_call[-1].split() and wfull in deep_call[-1].split(), (xfull, wfull, deep_call[-1:]))
-    check('long values are readable in full from the tooltip', g['xbox'].toolTip().split('\n')[0] == xfull and len(xfull) > 20, g['xbox'].toolTip())
+    check('long values are readable in full from the tooltip', g['xbox'].toolTip() == xfull and len(xfull) > 20, g['xbox'].toolTip())
     check('coordinates keep their digits (not rounded through a float)', len(xfull.replace('-', '').replace('.', '')) > 20, xfull)
     # the boxes show a short form that still tells the scale: leading digits, an ellipsis, trailing digits, power of ten
     fm = g['xbox'].fontMetrics()
@@ -1424,52 +1424,6 @@ def drive():
 
     def render_calls():
         return [c for c in calls() if c.strip() and c.split()[0] != 'REF_EXISTED']
-    # -- the coordinate boxes can be typed into: x, y and the width (a new width keeps the view's center)
-    g['on_reset']()
-    xb, yb, wb = g['xbox'], g['ybox'], g['wbox']
-    check('the coordinate boxes can be edited', not xb.isReadOnly() and not yb.isReadOnly() and not wb.isReadOnly())
-    cx0 = Decimal(exact(g, 'xbox')) + Decimal(exact(g, 'wbox')) / 2
-    cy0 = Decimal(exact(g, 'ybox')) + Decimal(exact(g, 'wbox')) * 800 / 1200 / 2
-
-    def type_into(box, text):
-        box.setFocus()
-        QtWidgets.QApplication.processEvents()
-        box.setText(text)
-        box.returnPressed.emit()
-        QtWidgets.QApplication.processEvents()
-    check('clicking into a box shows the whole value to edit', (xb.setFocus() or True) and xb.text() == exact(g, 'xbox'))
-    xb.clearFocus()
-    type_into(wb, '0.5')
-    check('typing a width keeps the view\'s center', exact(g, 'wbox') == '0.5' and abs(Decimal(exact(g, 'xbox')) + Decimal('0.25') - cx0) < Decimal('1e-20') and
-          abs(Decimal(exact(g, 'ybox')) + Decimal('0.25') * 800 / 1200 - cy0) < Decimal('1e-20'), (exact(g, 'xbox'), exact(g, 'ybox'), exact(g, 'wbox')))
-    check('the picture box of the next render follows: the candidate is the typed view', str(g['reg'].cand_xyw.w) == '0.5' and g['reg'].cand_xyw.x == Decimal(exact(g, 'xbox')))
-    type_into(xb, '-0.7436438870371587')
-    type_into(yb, '1.3e-1')
-    check('typing x and y sets the lower-left corner exactly', exact(g, 'xbox') == '-0.7436438870371587' and Decimal(exact(g, 'ybox')) == Decimal('0.13') and
-          exact(g, 'wbox') == '0.5', (exact(g, 'xbox'), exact(g, 'ybox'), exact(g, 'wbox')))
-    type_into(wb, '1e-30')
-    check('a deep width is accepted and shown abbreviated or whole', exact(g, 'wbox') == '1e-30' and wb.text() in ('1e-30', '1E-30'), (exact(g, 'wbox'), wb.text()))
-    before = (exact(g, 'xbox'), exact(g, 'ybox'), exact(g, 'wbox'))
-    for box, bad in ((wb, '0'), (wb, '-1'), (wb, 'abc'), (wb, 'NaN'), (wb, 'Infinity'), (wb, ''), (wb, '1e7'), (wb, '1e-5000'), (xb, '1e7'), (yb, 'x'), (xb, '1,5')):
-        type_into(box, bad)
-        check('a bad value (%r in %s) is refused and the old value stays' % (bad, box.name), (exact(g, 'xbox'), exact(g, 'ybox'), exact(g, 'wbox')) == before,
-              (exact(g, 'xbox'), exact(g, 'ybox'), exact(g, 'wbox')))
-    check('and the refused box shows the old value again', wb.text() == before[2] or wb.text() == __import__('deepzoom').abbreviate(before[2]))
-    # Run draws the typed view (here 1e-30 wide, so from a reference orbit)
-    n0 = len(list(MAP))
-    wb.setFocus()
-    wb.setText('2e-12')
-    g['on_run']()
-    check('Run draws the typed view as a new view', len(list(MAP)) == n0 + 1 and MAP.curr.xywd.w == Decimal('2e-12') or str(MAP.curr.xywd.w) == '2e-12',
-          (len(list(MAP)), n0, MAP.curr.xywd))
-    # Esc gives up an edit
-    wb.setFocus()
-    wb.setText('999')
-    QtTest_key = __import__('PyQt5.QtTest', fromlist=['QTest']).QTest
-    QtTest_key.keyClick(wb, QtCore.Qt.Key_Escape)
-    check('Esc gives up an edit', exact(g, 'wbox') == '2e-12', exact(g, 'wbox'))
-    g['on_reset']()
-
     # -- a number typed into a box and followed straight by Enter (which runs the view) is used, not lost
     g['on_reset']()
     pbox = g['power_box']

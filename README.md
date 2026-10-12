@@ -65,7 +65,7 @@ Run it:
 
 | Control | What it does |
 |---|---|
-| Drag on the picture | Draws a selection box (always the picture's own shape). Its exact coordinates appear on the right, where you can also type them. |
+| Drag on the picture | Draws a selection box (always the picture's own shape). Its exact coordinates appear on the right. |
 | **Run** (or **Enter**) | Draws the selection. If you haven't made a new selection, it redraws the current view in place, which is how you apply a new iteration limit. |
 | **Back**, thumbnails | Return to an earlier view. Every control (coordinates, multiplier, and every color setting) then shows that view's own settings, and a region boxed from it starts from them, not from whatever you used last. The selected thumbnail has a tiny **×** in its corner: it deletes that view and all of its files (after asking), and shows the view before it. Views that were zoomed from the deleted one now hang from its parent, so **Back** always goes to the next real view back. The opening view has no ×. |
 | **Save** | Writes the picture on screen as a PNG (see below). |
@@ -82,11 +82,6 @@ The controls are in four groups, top to bottom: **Selection** (the coordinates o
 
 The coordinate boxes show long numbers in short form, such as `-0.743643887...6114774` and `1.23456789...8901234e-45`:
 the first digits, the last digits and the power of ten. Hover over a box to see every digit.
-
-You can also **type** into the three boxes. Click a box to see its whole value, type a number (ordinary decimals or scientific notation, such as
-`-0.75` or `1e-30`), and press Enter, Tab or **Run**. A new **Width** keeps the center of the view, so it zooms in or out around what you are looking
-at; **X** and **Y** set the lower-left corner. A value that is not a number, or is out of range (the width must be from 1e-4000 to 1e6), is
-refused with a short message and the old value returns. Esc gives up an edit.
 
 ### Colors
 
